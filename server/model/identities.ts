@@ -8,7 +8,9 @@
 // Formato do arquivo:
 //   { "identidades": [
 //       { "nome": "Cody", "ferramenta": "claude", "look": "m", "seed": 3, "parts": { ...AppearanceParts } },
-//       { "nome": "Codex", "ferramenta": "codex", "pasta": "Ordahi AIOS", ... } ] }
+//       { "nome": "Codex", "ferramenta": "codex", "pasta": "Ordahi AIOS", ... },
+//       { "nome": "Tars", "ferramenta": "externo", "chave": "tars", ... } ] }
+// `ferramenta: "externo"` é um agente de fora (Hermes na VPS, server/sources/external.ts), achado pela `chave`.
 // `pasta` (opcional) é um trecho do caminho do projeto, sem diferenciar caixa; a primeira regra que casa vence, então
 // regra com pasta vem antes da regra geral da mesma ferramenta. O arquivo é relido quando muda.
 import { readFileSync, statSync } from 'node:fs';
@@ -17,9 +19,14 @@ import type { Provider } from '../../shared/types';
 import { errMsg, log } from '../log';
 import { tr } from '../../shared/i18n';
 
+/** Ferramenta da identidade: as do Habblaud ou um agente de fora (fonte externa). */
+export type IdentityProvider = Provider | 'external';
+
 export interface Identity {
   name: string;
-  provider: Provider;
+  provider: IdentityProvider;
+  /** Só externos: o id do agente na fonte externa (ex.: "tars"), minúsculo. */
+  key?: string;
   look: 'f' | 'm';
   seed: number;
   parts?: AppearanceParts;
@@ -32,21 +39,26 @@ export interface Identity {
   home?: string;
 }
 
-const PROVIDERS: readonly Provider[] = ['claude', 'codex'];
+const PROVIDERS: readonly IdentityProvider[] = ['claude', 'codex', 'external'];
+const ALIASES: Readonly<Record<string, IdentityProvider>> = { externo: 'external' };
 
 /** Uma entrada do arquivo, ou null se estiver fora do formato (a entrada é ignorada, as outras valem). */
 export function parseIdentity(raw: unknown): Identity | null {
   if (!raw || typeof raw !== 'object') return null;
   const v = raw as Record<string, unknown>;
   const name = parseCharacterName(v.nome ?? v.name);
-  const provider = (v.ferramenta ?? v.provider) as Provider;
+  const rawProvider = String(v.ferramenta ?? v.provider ?? '');
+  const provider = (ALIASES[rawProvider] ?? rawProvider) as IdentityProvider;
   if (!name || !PROVIDERS.includes(provider)) return null;
+  const key = typeof (v.chave ?? v.key) === 'string' ? String(v.chave ?? v.key).trim().toLowerCase() : '';
+  if (provider === 'external' && !key) return null;
   const look = v.look === 'f' ? 'f' : 'm';
   const seed = v.seed === undefined ? 0 : parseSeed(v.seed);
   if (seed === null) return null;
   const parts = v.parts === undefined ? {} : parseAppearanceParts(v.parts);
   if (!parts) return null;
   const id: Identity = { name, provider, look, seed };
+  if (key) id.key = key;
   if (Object.keys(parts).length) id.parts = parts;
   const path = v.pasta ?? v.path;
   if (typeof path === 'string' && path.trim()) id.path = path.trim().toLowerCase();
@@ -74,6 +86,12 @@ export function inFolder(cwd: string, fragment: string): boolean {
 /** A sessão nesta pasta está na casa da identidade (sem casa declarada, toda pasta conta como casa). */
 export function atHome(ident: Identity, cwd: string): boolean {
   return !ident.home || inFolder(cwd, ident.home);
+}
+
+/** Identidade de um agente externo pela chave dele. */
+export function matchExternal(list: readonly Identity[], key: string): Identity | undefined {
+  const k = key.toLowerCase();
+  return list.find((i) => i.provider === 'external' && i.key === k);
 }
 
 /** Primeira identidade que casa com a ferramenta e o projeto. */
@@ -114,5 +132,9 @@ export class IdentityFile {
 
   match(provider: Provider, cwd: string): Identity | undefined {
     return matchIdentity(this.current(), provider, cwd);
+  }
+
+  external(key: string): Identity | undefined {
+    return matchExternal(this.current(), key);
   }
 }

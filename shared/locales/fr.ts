@@ -3297,4 +3297,11 @@ export const FR: Readonly<Record<string, string>> = {
   "🪪 {0} assumiu como {1}": "🪪 {0} a pris le relais en tant que {1}",
   "Identidades fixas: {0} em {1}": "Identités fixes : {0} dans {1}",
   "Não consegui ler {0}: {1}": "Impossible de lire {0} : {1}",
+  // Fork Ordahi: agentes externos (server/sources/external.ts)
+  "Agentes externos: lendo {0}": "Agents externes : lecture de {0}",
+  "resposta fora do formato": "réponse hors format",
+  "Agentes externos: sem resposta de {0} ({1})": "Agents externes : pas de réponse de {0} ({1})",
+  "responder ao agente": "répondre à l'agent",
+  "Agente remoto": "Agent distant",
+  "Agente remoto: {0}": "Agent distant : {0}",
 };

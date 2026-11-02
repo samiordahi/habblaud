@@ -2,7 +2,12 @@
 
 /** cwd normalizado: sem barras repetidas nem barra final. */
 export function normalizeCwd(cwd: string): string {
-  const p = cwd.trim().replace(/\/{2,}/g, '/');
+  // Fork Ordahi: no Windows a letra do drive não diferencia caixa. O VS Code manda "d:", o Node e o PowerShell "D:";
+  // sem isto, o mesmo projeto abria duas salas.
+  const p = cwd
+    .trim()
+    .replace(/\/{2,}/g, '/')
+    .replace(/^([a-z]):/i, (_m, d: string) => `${d.toUpperCase()}:`);
   return p.length > 1 ? p.replace(/\/+$/, '') : p;
 }
 

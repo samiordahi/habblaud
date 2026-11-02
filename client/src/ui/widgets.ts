@@ -52,17 +52,20 @@ export function createRoleBadge(): HTMLElement {
   return h('span', { class: 'ui-role' });
 }
 
-export function updateRoleBadge(badge: HTMLElement, agent: Pick<AgentInfo, 'kind' | 'role' | 'background' | 'helperOf'>): void {
-  // Fork Ordahi: sessão em paralelo de um agente com identidade fixa aparece como ajudante dele.
-  const main = agent.helperOf ? tr('Ajudante do {0}', [agent.helperOf]) : tr('Principal');
+export function updateRoleBadge(badge: HTMLElement, agent: Pick<AgentInfo, 'kind' | 'role' | 'background' | 'helperOf' | 'remote'>): void {
+  // Fork Ordahi: sessão em paralelo de um agente com identidade fixa aparece como ajudante dele; agente de fora
+  // mostra de onde vem.
+  const main = agent.remote ?? (agent.helperOf ? tr('Ajudante do {0}', [agent.helperOf]) : tr('Principal'));
   setText(badge, agent.kind === 'main' ? main : agent.role || tr('Subagente'));
   setVariant(badge, 'ui-role--', agent.kind);
   setTitle(
     badge,
     agent.kind === 'main'
-      ? agent.helperOf
-        ? tr('Sessão em paralelo do {0}', [agent.helperOf])
-        : tr('Agente principal')
+      ? agent.remote
+        ? tr('Agente remoto: {0}', [agent.remote])
+        : agent.helperOf
+          ? tr('Sessão em paralelo do {0}', [agent.helperOf])
+          : tr('Agente principal')
       : tr('Subagente: {0}{1}', [agent.role, agent.background ? tr(' (em segundo plano)') : '']),
   );
 }

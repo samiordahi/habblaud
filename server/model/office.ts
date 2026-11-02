@@ -110,6 +110,10 @@ export interface MainInput {
   startedAt: number;
   status: AgentStatus;
   waitingFor?: string;
+  /** Fork Ordahi: identidade já resolvida pela fonte (agentes externos); ganha da regra por ferramenta. */
+  identity?: Identity;
+  /** Fork Ordahi: de onde vem o agente externo (AgentInfo.remote), ex.: "Hermes · VPS". */
+  remote?: string;
 }
 
 export interface SubInput {
@@ -328,7 +332,7 @@ export class Office {
     const roomId = normalizeCwd(p.cwd);
     this.ensureRoom(roomId, now);
     // Fork Ordahi: com identidade fixa para a ferramenta, a primeira sessão viva a veste e as outras são ajudantes.
-    const ident = this.deps.identity?.(p.provider ?? 'claude', p.cwd);
+    const ident = p.identity ?? this.deps.identity?.(p.provider ?? 'claude', p.cwd);
     const holder = ident ? this.identityHolder(ident.name) : undefined;
     // A titular fora de casa cede a identidade à primeira sessão que chega em casa e vira ajudante dela.
     if (ident && holder && atHome(ident, p.cwd) && !atHome(ident, this.roomPath(holder.info.roomId) ?? holder.info.roomId)) {
@@ -358,6 +362,7 @@ export class Office {
       seed: titular?.seed ?? chosen?.seed ?? hash32(p.id),
     };
     if (p.provider && p.provider !== 'claude') info.provider = p.provider;
+    if (p.remote) info.remote = p.remote;
     if (titular) {
       info.identity = titular.name;
       if (titular.parts) info.parts = { ...titular.parts };

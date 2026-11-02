@@ -38,6 +38,34 @@ O Habblaud original dá um personagem sorteado a cada sessão. Aqui, cada ferram
 O arquivo é relido quando muda; sem ele, tudo volta ao sorteio do Habblaud. Código em `server/model/identities.ts`,
 testes em `server/model/identities.test.ts`.
 
+## Agentes de fora: a ponte com o AIOS
+
+O Hermes roda na VPS, e com ele os perfis Tars, Bella Banker e Stella Sales. Quem lê a VPS é o painel do AIOS
+(`hermes logs -f` por SSH, reduzido a estado, ferramenta e hora). O Habblaud só consulta o recorte pronto:
+
+```
+HABBLAUD_EXTERNAL_URL=http://127.0.0.1:4360/api/agentes-remotos
+```
+
+```json
+{ "projeto": "D:\\Documentos\\Ordahi AIOS",
+  "agentes": [ { "id": "tars", "nome": "Tars", "estado": "active", "atividade": "Auditoria da inbox",
+                 "ferramenta": "Hermes", "quando": "2026-11-01T10:02:03Z", "origem": "VPS" } ] }
+```
+
+- Cada agente vira um principal na sala do `projeto`, junto com o Cody, com o selo "Hermes · VPS" (ou "· GitHub",
+  quando o último sinal veio do repositório).
+- A aparência vem de `identidades.json`, com `"ferramenta": "externo"` e `"chave"` igual ao `id`. Sem regra, o nome
+  vem da ponte.
+- `estado`: `active` trabalha, `waiting` pede você, `idle` descansa, `error` descansa com a atividade marcada como erro.
+- Quem some do retrato sai pelo elevador; se a ponte cai por 20 consultas seguidas (~1 min), todos os externos saem e
+  voltam quando ela volta.
+- Prompt, argumento e saída não fazem parte do contrato. Terminal, aprovação e mensagens não existem para externos.
+
+Código em `server/sources/external.ts`, testes em `server/sources/external.test.ts`.
+
+No Windows, a letra do drive não diferencia caixa na sala (`server/model/rooms.ts`): o VS Code manda `d:`, o Node `D:`.
+
 ## Atualizar a partir do original
 
 ```bash

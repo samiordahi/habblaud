@@ -178,6 +178,8 @@ export interface AgentInfo {
   identity?: string;
   /** Fork Ordahi: sessão em paralelo de um agente com identidade fixa; o valor é o nome da identidade. */
   helperOf?: string;
+  /** Fork Ordahi: agente de fora (server/sources/external.ts); o valor diz de onde, ex.: "Hermes · VPS". */
+  remote?: string;
   /** Subagente rodando em segundo plano. */
   background?: boolean;
   /**

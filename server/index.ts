@@ -20,6 +20,7 @@ import { describeStateMigration, legacyEnvWarning, migrateLegacyStateDir } from 
 import { errMsg, log } from './log';
 import { NameStore } from './model/names';
 import { IdentityFile } from './model/identities';
+import { ExternalSource } from './sources/external';
 import { Office } from './model/office';
 import { RoomAliases } from './model/room-aliases';
 import { createPtyRoutes } from './http/pty';
@@ -147,6 +148,12 @@ if (codex) agents.add(codex);
 const codexLive: CodexLive | undefined = codex;
 late.office = office;
 late.agents = agents;
+// Fork Ordahi: agentes de fora (Hermes na VPS) pela ponte do painel do AIOS; ver server/sources/external.ts.
+const externalUrl = process.env.HABBLAUD_EXTERNAL_URL?.trim();
+const external = externalUrl
+  ? new ExternalSource({ url: externalUrl, office, identity: (key) => identities.external(key) })
+  : undefined;
+external?.start();
 // Página que pode responder pelo escritório: Host local na porta local; na remota, só com permissions liberado.
 const hub = new Hub(office, {
   canAnswer: (req) => (isRemoteRequest(req) ? !!config.remote?.allow.has('permissions') : isLoopbackHost(req.headers.host)),
