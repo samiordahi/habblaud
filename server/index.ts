@@ -11,7 +11,7 @@ import { createApiHandler, sendJson } from './http/app';
 import { createRequestGuard, isLoopbackHost } from './http/guard';
 import { createRemoteGate, isRemoteRequest, loadSecret, RemoteSessions, startRemoteListener, type RemoteListener } from './http/remote';
 import { Hub } from './http/sse';
-import { createStaticHandler } from './http/static';
+import { createStaticHandler, parseFrameAncestors } from './http/static';
 import { TerminalStreams } from './http/terminal';
 import { createTimelineHandler } from './http/timeline';
 import { TIMELINE_DIR, TimelineRecorder } from './history/timeline';
@@ -413,7 +413,10 @@ if (config.dev) {
   closeVite = () => vite.close();
   fallback = (req, res) => vite.middlewares(req, res);
 } else {
-  const serveStatic = createStaticHandler(join(config.rootDir, 'dist', 'client'));
+  // Fork Ordahi: HABBLAUD_FRAME_ANCESTORS deixa o painel do AIOS embutir o escritório (só origens locais).
+  const serveStatic = createStaticHandler(join(config.rootDir, 'dist', 'client'), {
+    frameAncestors: parseFrameAncestors(process.env.HABBLAUD_FRAME_ANCESTORS),
+  });
   fallback = (req, res, url) => serveStatic(req, res, url.pathname);
 }
 

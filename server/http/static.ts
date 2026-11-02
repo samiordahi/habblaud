@@ -70,9 +70,38 @@ export function isNotModified(req: IncomingMessage, etag: string, mtimeMs: numbe
   return false;
 }
 
-export function createStaticHandler(distDir: string): (req: IncomingMessage, res: ServerResponse, pathname: string) => void {
+/**
+ * Fork Ordahi: origens que podem embutir o escritório num iframe (HABBLAUD_FRAME_ANCESTORS, separadas por espaço ou
+ * vírgula), ex.: o painel do AIOS em http://127.0.0.1:4360. Só origens do próprio computador (localhost, 127.0.0.1,
+ * [::1]) são aceitas: abrir o iframe para um site de fora traria de volta o clickjacking que o DENY evita.
+ */
+export function parseFrameAncestors(raw: string | undefined): string[] {
+  const out: string[] = [];
+  for (const item of (raw ?? '').split(/[\s,]+/).filter(Boolean)) {
+    let u: URL;
+    try {
+      u = new URL(item);
+    } catch {
+      continue;
+    }
+    if (!/^https?:$/.test(u.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)) continue;
+    if (!out.includes(u.origin)) out.push(u.origin);
+  }
+  return out;
+}
+
+export function createStaticHandler(
+  distDir: string,
+  opts: { frameAncestors?: readonly string[] } = {},
+): (req: IncomingMessage, res: ServerResponse, pathname: string) => void {
   const root = resolve(distDir);
   const index = join(root, 'index.html');
+  const ancestors = opts.frameAncestors ?? [];
+  // A página não deve ser embutida em sites de terceiros (clickjacking nas configurações). Com origens declaradas, o
+  // CSP frame-ancestors diz quem pode; sem elas, ninguém.
+  const frameHeaders: Record<string, string> = ancestors.length
+    ? { 'Content-Security-Policy': `frame-ancestors 'self' ${ancestors.join(' ')}` }
+    : { 'X-Frame-Options': 'DENY' };
 
   const send = (req: IncomingMessage, res: ServerResponse, file: string, st: Stats, cache: string) => {
     const etag = etagOf(st);
@@ -81,8 +110,7 @@ export function createStaticHandler(distDir: string): (req: IncomingMessage, res
       ETag: etag,
       'Last-Modified': new Date(st.mtimeMs).toUTCString(),
       'X-Content-Type-Options': 'nosniff',
-      // A página não deve ser embutida em sites de terceiros (clickjacking nas configurações).
-      'X-Frame-Options': 'DENY',
+      ...frameHeaders,
       'Referrer-Policy': 'no-referrer',
     };
     if (isNotModified(req, etag, st.mtimeMs)) {

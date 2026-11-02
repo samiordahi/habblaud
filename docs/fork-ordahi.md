@@ -66,6 +66,20 @@ Código em `server/sources/external.ts`, testes em `server/sources/external.test
 
 No Windows, a letra do drive não diferencia caixa na sala (`server/model/rooms.ts`): o VS Code manda `d:`, o Node `D:`.
 
+## Dentro do painel do AIOS
+
+O escritório abre na aba Agentes do painel (`apps/painel/app/src/agentes.tsx` no AIOS), num iframe. O original
+recusa iframe (`X-Frame-Options: DENY`, contra clickjacking); aqui `HABBLAUD_FRAME_ANCESTORS` lista as origens que
+podem embutir, só do próprio computador (`localhost`, `127.0.0.1`, `[::1]`):
+
+```
+HABBLAUD_FRAME_ANCESTORS="http://127.0.0.1:4360 http://localhost:4360"
+```
+
+Com a lista, sai `Content-Security-Policy: frame-ancestors 'self' <origens>` no lugar do DENY; sem ela, tudo como no
+original. O painel liga o Habblaud já com isso (`scripts/painel-habblaud.mjs` no AIOS). Código em
+`server/http/static.ts`, testes em `server/http/frame.test.ts`.
+
 ## Atualizar a partir do original
 
 ```bash
