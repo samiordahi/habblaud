@@ -19,6 +19,7 @@ import { DayStatsService } from './history/daystats';
 import { describeStateMigration, legacyEnvWarning, migrateLegacyStateDir } from './legacy';
 import { errMsg, log } from './log';
 import { NameStore } from './model/names';
+import { IdentityFile } from './model/identities';
 import { Office } from './model/office';
 import { RoomAliases } from './model/room-aliases';
 import { createPtyRoutes } from './http/pty';
@@ -113,6 +114,7 @@ const accounts = new AccountsService({
   usageDir: config.usageDir,
   onChange: () => late.office?.markDirty(),
 });
+const identities = new IdentityFile(join(config.dataDir, 'identidades.json'));
 const office = new Office({
   names,
   roomAlias: (path) => roomAliases.get(path),
@@ -129,6 +131,8 @@ const office = new Office({
   ptys: () => (late.ptys ? { status: late.ptys.status(), list: late.ptys.list() } : { status: { enabled: false, reason: late.ptyOff ?? tr('desligado') }, list: [] }),
   updates: () => updates.status(),
   world: () => world?.meta() ?? { enabled: false, configured: false, state: 'off' },
+  // Fork Ordahi: um personagem fixo por agente (<dataDir>/identidades.json; ver server/model/identities.ts).
+  identity: (provider, cwd) => identities.match(provider, cwd),
 });
 // Fontes de agentes, uma por ferramenta (sources/source.ts): a do Claude Code e, depois dela, a do Codex (quando há
 // pastas do Codex; HABBLAUD_CODEX=0 desliga), com o histórico dela no HistorySet abaixo e as contas registradas por

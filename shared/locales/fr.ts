@@ -3290,4 +3290,11 @@ export const FR: Readonly<Record<string, string>> = {
   "Carimbo deixado na portaria: {0}": "Tampon laissé à l'accueil : {0}",
   "Entre no prédio ou chegue mais perto da porta para carimbar.": "Entrez dans l'immeuble ou approchez-vous de la porte pour tamponner.",
   "O carimbo não foi deixado. Tente de novo.": "Le tampon n'a pas été laissé. Réessayez.",
+
+  // Fork Ordahi: identidades fixas (server/model/identities.ts, client/src/ui/widgets.ts)
+  "Ajudante do {0}": "Assistant de {0}",
+  "Sessão em paralelo do {0}": "Session parallèle de {0}",
+  "🪪 {0} assumiu como {1}": "🪪 {0} a pris le relais en tant que {1}",
+  "Identidades fixas: {0} em {1}": "Identités fixes : {0} dans {1}",
+  "Não consegui ler {0}: {1}": "Impossible de lire {0} : {1}",
 };

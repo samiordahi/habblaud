@@ -174,6 +174,10 @@ export interface AgentInfo {
   parts?: AppearanceParts;
   /** Usa o personagem escolhido para o projeto (a sala): o painel oferece "Voltar ao sorteio". */
   custom?: true;
+  /** Fork Ordahi: veste a identidade fixa da ferramenta (server/model/identities.ts); o valor é o nome dela. */
+  identity?: string;
+  /** Fork Ordahi: sessão em paralelo de um agente com identidade fixa; o valor é o nome da identidade. */
+  helperOf?: string;
   /** Subagente rodando em segundo plano. */
   background?: boolean;
   /**

@@ -30,6 +30,7 @@ import { describeGitHubEvent, githubEventKey, RoomEffects, type GitHubEvent } fr
 import { hash32 } from '../../shared/hash';
 import { applyPermission } from '../permissions/registry';
 import type { NameStore, StoredCharacter } from './names';
+import { atHome, type Identity } from './identities';
 import { normalizeCwd, roomDisplayNames, SlotAllocator } from './rooms';
 import { tr } from '../../shared/i18n';
 import type { WorldMeta } from '../../shared/world/api';
@@ -80,6 +81,8 @@ export interface OfficeDeps {
   ptys?: () => { status: PtyStatus; list: PtyInfo[] };
   /** Habblaud World (WorldService.meta; ver OfficeSnapshot.meta.world). */
   world?: () => WorldMeta;
+  /** Fork Ordahi: identidade fixa da ferramenta no projeto (server/model/identities.ts); ausente = só o sorteio. */
+  identity?: (provider: Provider, cwd: string) => Identity | undefined;
   now?: () => number;
 }
 
@@ -324,10 +327,18 @@ export class Office {
     }
     const roomId = normalizeCwd(p.cwd);
     this.ensureRoom(roomId, now);
-    const chosen = this.roomCharacter(roomId, p.id, p.sessionId);
+    // Fork Ordahi: com identidade fixa para a ferramenta, a primeira sessão viva a veste e as outras são ajudantes.
+    const ident = this.deps.identity?.(p.provider ?? 'claude', p.cwd);
+    const holder = ident ? this.identityHolder(ident.name) : undefined;
+    // A titular fora de casa cede a identidade à primeira sessão que chega em casa e vira ajudante dela.
+    if (ident && holder && atHome(ident, p.cwd) && !atHome(ident, this.roomPath(holder.info.roomId) ?? holder.info.roomId)) {
+      this.demoteHolder(holder, ident.name);
+    }
+    const titular = ident && !this.identityHolder(ident.name) ? ident : undefined;
+    const chosen = ident ? undefined : this.roomCharacter(roomId, p.id, p.sessionId);
     // A mesma sessão retomada noutro processo (ex.: "Assumir aqui") mantém o nome, mesmo com o processo antigo
     // ainda saindo do escritório.
-    const person = chosen ?? this.deps.names.assign(p.sessionId, this.takenNames(undefined, p.sessionId));
+    const person = titular ?? chosen ?? this.deps.names.assign(p.sessionId, this.takenNames(undefined, p.sessionId));
     const info: AgentInfo = {
       id: p.id,
       kind: 'main',
@@ -344,10 +355,15 @@ export class Office {
       lastEventAt: p.startedAt,
       statusSince: now,
       stats: zeroStats(),
-      seed: chosen?.seed ?? hash32(p.id),
+      seed: titular?.seed ?? chosen?.seed ?? hash32(p.id),
     };
     if (p.provider && p.provider !== 'claude') info.provider = p.provider;
-    if (chosen) {
+    if (titular) {
+      info.identity = titular.name;
+      if (titular.parts) info.parts = { ...titular.parts };
+    } else if (ident) {
+      info.helperOf = ident.name;
+    } else if (chosen) {
       info.custom = true;
       if (chosen.parts) info.parts = { ...chosen.parts };
     }
@@ -367,7 +383,9 @@ export class Office {
     const info = rec.info;
     // Personagem do projeto: o nome escolhido não vira o nome sorteado da sessão nova, e a sessão nova vira a dona dele
     // (se outro agente da sala salvou por último, o dono é ele e fica como está).
-    if (info.custom) {
+    if (info.identity) {
+      // Fork Ordahi: a identidade fixa é da ferramenta, não da sessão; não vira o nome guardado da sessão nova.
+    } else if (info.custom) {
       const owner = this.deps.names.character(info.roomId)?.owner;
       if (owner === undefined || owner === info.sessionId) this.deps.names.claimCharacter(info.roomId, sessionId);
     } else {
@@ -875,6 +893,61 @@ export class Office {
    * tem nome guardado mantém o dela: depois de um reinício, a ordem de chegada não troca identidades nem muda o
    * personagem de uma sessão no meio dela.
    */
+  /** Fork Ordahi: o agente presente (fora do período de graça) que veste a identidade fixa `name`. */
+  private identityHolder(name: string): AgentRecord | undefined {
+    for (const r of this.agents.values()) if (r.info.identity === name && r.removeAt === undefined) return r;
+    return undefined;
+  }
+
+  /** Fork Ordahi: a titular devolve a identidade e vira ajudante, com um nome sorteado como qualquer sessão. */
+  private demoteHolder(rec: AgentRecord, name: string): void {
+    const info = rec.info;
+    const person = this.deps.names.assign(info.sessionId, this.takenNames(info.id, info.sessionId));
+    delete info.identity;
+    info.helperOf = name;
+    info.name = person.name;
+    info.look = person.look;
+    info.seed = hash32(info.id);
+    delete info.parts;
+    this.markDirty();
+  }
+
+  /** Fork Ordahi: a titular saiu; o ajudante em casa (ou o mais antigo) assume a identidade. */
+  private promoteHelper(name: string): void {
+    if (this.identityHolder(name)) return;
+    // Ajudante em casa primeiro; entre iguais, o mais antigo.
+    let next: AgentRecord | undefined;
+    let nextHome = false;
+    for (const r of this.agents.values()) {
+      if (r.info.helperOf !== name || r.removeAt !== undefined) continue;
+      const id = this.deps.identity?.(r.info.provider ?? 'claude', this.roomPath(r.info.roomId) ?? r.info.roomId);
+      const home = !!id && atHome(id, this.roomPath(r.info.roomId) ?? r.info.roomId);
+      if (!next || (home && !nextHome) || (home === nextHome && r.info.startedAt < next.info.startedAt)) {
+        next = r;
+        nextHome = home;
+      }
+    }
+    if (!next) return;
+    const info = next.info;
+    const ident = this.deps.identity?.(info.provider ?? 'claude', this.roomPath(info.roomId) ?? info.roomId);
+    // A regra mudou ou sumiu enquanto a sessão estava aberta: ela segue com o próprio nome, sem selo de ajudante.
+    if (!ident || ident.name !== name) {
+      delete info.helperOf;
+      this.markDirty();
+      return;
+    }
+    const before = info.name;
+    delete info.helperOf;
+    info.identity = ident.name;
+    info.name = ident.name;
+    info.look = ident.look;
+    info.seed = ident.seed;
+    if (ident.parts) info.parts = { ...ident.parts };
+    else delete info.parts;
+    this.notice('character', info.id, 'info', tr('🪪 {0} assumiu como {1}', [before, ident.name]), info.roomId);
+    this.markDirty();
+  }
+
   private roomCharacter(roomId: string, id: string, sessionId: string): StoredCharacter | undefined {
     const c = this.deps.names.character(roomId);
     if (!c) return undefined;
@@ -920,12 +993,15 @@ export class Office {
       if (r.changed || r.feed.length || r.notices.length) this.markDirty();
     }
     let removed = false;
+    const vacated: string[] = [];
     for (const [id, rec] of this.agents) {
       if (rec.removeAt !== undefined && now >= rec.removeAt) {
         this.agents.delete(id);
+        if (rec.info.identity) vacated.push(rec.info.identity);
         removed = true;
       }
     }
+    for (const name of vacated) this.promoteHelper(name);
     // festa acabou / alarme expirou: o snapshot sai sem o efeito
     if (this.effects.prune(now)) this.markDirty();
     if (removed) {
