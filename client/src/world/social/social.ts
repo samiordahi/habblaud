@@ -35,7 +35,7 @@ import {
   type Role,
 } from './gathering';
 import * as L from './lines';
-import { bondBetween, hasTrait, personaFor, TRAITS, type Persona, type TraitId } from './persona';
+import { bondOf, hasTrait, personaOf, TRAITS, type Persona, type TraitId } from './persona';
 import { DELIVERY_REWARD, TURN_REWARD, Wallets, type StorageLike } from './wallet';
 import { tr } from '../../../../shared/i18n';
 
@@ -134,7 +134,7 @@ export class Social {
    */
   tryInitiate(ch: Character, now: number, groupOnly: boolean): boolean {
     if (!this.canJoin(ch, now)) return false;
-    const p = personaFor(ch.info.seed);
+    const p = personaOf(ch.info);
     const open = this.joinable(ch, p);
     if (open && ch.rng() < 0.4) return this.join(open, ch, now);
     const cands = this.candidates(ch, now);
@@ -181,20 +181,20 @@ export class Social {
   private start(kind: GatherKind, host: Character, cands: Character[], now: number, groupOnly: boolean, wantOverride?: number, forced = false): boolean {
     const info = KINDS[kind];
     const rng = host.rng;
-    const hp = personaFor(host.info.seed);
+    const hp = personaOf(host.info);
     let want: number;
     if (wantOverride !== undefined) want = wantOverride;
     else if (kind === 'tv') want = 1 + Math.floor(rng() * 3);
     else if (kind === 'kitchen') want = 1 + Math.floor(rng() * 2.4);
-    else if (kind === 'mirror') want = groupOnly ? 1 : cands.some((c) => hasTrait(personaFor(c.info.seed), 'vaidade')) && rng() < 0.5 ? 1 : 0;
+    else if (kind === 'mirror') want = groupOnly ? 1 : cands.some((c) => hasTrait(personaOf(c.info), 'vaidade')) && rng() < 0.5 ? 1 : 0;
     else want = info.min - 1;
     // torcida já na largada, às vezes
     if (wantOverride === undefined && (kind === 'pingpong' || kind === 'videogame' || kind === 'rps') && rng() < 0.3) want++;
     want = Math.max(0, Math.min(want, cands.length, info.max - 1));
     const ranked = cands
       .map((c) => {
-        const cp = personaFor(c.info.seed);
-        let s = partnerScore(kind, cp, bondBetween(host.info.seed, c.info.seed), rng);
+        const cp = personaOf(c.info);
+        let s = partnerScore(kind, cp, bondOf(host.info, c.info), rng);
         if (this.sim.longIdle(c, now)) s -= 1.5;
         if (kind === 'mirror' && !hasTrait(cp, 'vaidade')) s -= 2;
         return { c, s };
@@ -248,7 +248,7 @@ export class Social {
     // aposta entre os dois jogadores
     if (info.match) {
       const [a, b] = everyone;
-      g.bet = betFor(kind, hp, personaFor(b.info.seed), this.wallets.coins(a.id), this.wallets.coins(b.id), bondBetween(a.info.seed, b.info.seed), g.rng);
+      g.bet = betFor(kind, hp, personaOf(b.info), this.wallets.coins(a.id), this.wallets.coins(b.id), bondOf(a.info, b.info), g.rng);
     }
     this.gatherings.add(g);
     for (const m of g.members) this.dispatch(g, m, this.sim.chars.get(m.id)!, now);
@@ -263,7 +263,7 @@ export class Social {
   /** Convite (quem chamou) e o "bora!" de cada convidado, um pouco depois. */
   private invite(g: Gathering, host: Character, guests: Character[], now: number): void {
     const rng = g.rng;
-    const hp = personaFor(host.info.seed);
+    const hp = personaOf(host.info);
     const first = guests[0];
     const vars = { nome: first?.info.name, v: g.bet };
     let pool: L.Pool = L.ACCEPT;
@@ -273,14 +273,14 @@ export class Social {
         text = L.pick(rng() < 0.5 ? L.INVITE.tv : L.INVITE[g.program ?? 'futebol'], rng, vars);
         break;
       case 'pingpong':
-        text = L.pick(first && bondBetween(host.info.seed, first.info.seed) === 'rivalidade' ? L.INVITE.pingpongRival : L.INVITE.pingpong, rng, vars);
+        text = L.pick(first && bondOf(host.info, first.info) === 'rivalidade' ? L.INVITE.pingpongRival : L.INVITE.pingpong, rng, vars);
         break;
       case 'kitchen':
         text = L.pick(hasTrait(hp, 'fofoca') ? L.INVITE.kitchenGossip : L.INVITE.kitchen, rng, vars);
         break;
       case 'rps':
         text = L.pick(g.bet ? L.INVITE.rps : L.INVITE.rpsHonor, rng, vars);
-        pool = g.bet ? (first && hasTrait(personaFor(first.info.seed), 'economia') ? L.ACCEPT_STINGY : L.ACCEPT_BET) : L.ACCEPT_BROKE;
+        pool = g.bet ? (first && hasTrait(personaOf(first.info), 'economia') ? L.ACCEPT_STINGY : L.ACCEPT_BET) : L.ACCEPT_BROKE;
         break;
       case 'mirror':
         text = guests.length ? L.pick(L.INVITE.mirror, rng, vars) : null;
@@ -307,7 +307,7 @@ export class Social {
     let held: HeldItem = 'none';
     if (g.kind === 'kitchen') {
       // passa na cafeteira (ou no bebedouro) antes de sentar para o papo
-      const kind = hasTrait(personaFor(ch.info.seed), 'cafeina') || ch.rng() < 0.65 ? 'coffee' : 'water';
+      const kind = hasTrait(personaOf(ch.info), 'cafeina') || ch.rng() < 0.65 ? 'coffee' : 'water';
       const stop = sim.spots.findFree(kind, { by: ch.id, rng: ch.rng }) ?? sim.spots.findFree(kind === 'coffee' ? 'water' : 'coffee', { by: ch.id, rng: ch.rng });
       if (stop && ch.rng() < 0.8 && sim.reserveTemp(ch, stop)) {
         const coffee = stop.kind === 'coffee';
@@ -344,7 +344,7 @@ export class Social {
       s *= g.kind === 'tv' ? (hasTrait(p, 'series') ? 3 : 1.4) : g.kind === 'kitchen' ? (hasTrait(p, 'fofoca') || hasTrait(p, 'cafeina') ? 2.5 : 1) : hasTrait(p, 'competicao') || hasTrait(p, 'esporte') || hasTrait(p, 'games') ? 2 : 1;
       for (const m of active(g)) {
         const o = this.sim.chars.get(m.id);
-        const b = o ? bondBetween(ch.info.seed, o.info.seed) : null;
+        const b = o ? bondOf(ch.info, o.info) : null;
         if (b === 'amizade') s += 0.8;
       }
       s *= 0.6 + ch.rng() * 0.8;
@@ -731,7 +731,7 @@ export class Social {
   private basePose(g: Gathering, m: Member, now: number): void {
     const rng = g.rng;
     const c = this.sim.chars.get(m.id);
-    const p = c ? personaFor(c.info.seed) : null;
+    const p = c ? personaOf(c.info) : null;
     switch (g.kind) {
       case 'tv':
         // pipoca para quem é de séries/sonecas (e às vezes para os outros)
@@ -794,7 +794,7 @@ export class Social {
     // quem é de sonecas cochila no sofá na segunda metade
     for (const m of ms) {
       const c = this.charOf(m);
-      if (c && m.pose !== 'sleep' && hasTrait(personaFor(c.info.seed), 'sonecas') && now - g.startAt > (g.until - g.startAt) * 0.5) {
+      if (c && m.pose !== 'sleep' && hasTrait(personaOf(c.info), 'sonecas') && now - g.startAt > (g.until - g.startAt) * 0.5) {
         [m.pose, m.held] = ['sleep', 'none'];
         c.setIcon('zzz', Math.max(1_000, g.until - now), now);
       }
@@ -822,7 +822,7 @@ export class Social {
           if (speaker) this.say(speaker, L.pick(L.TV.futebol.goal, rng), now);
           for (const m of awake) {
             const c = this.charOf(m);
-            if (c && hasTrait(personaFor(c.info.seed), 'esporte')) c.setIcon('star', 1_600, now);
+            if (c && hasTrait(personaOf(c.info), 'esporte')) c.setIcon('star', 1_600, now);
           }
         } else if (r < 0.3) {
           if (speaker) this.say(speaker, L.pick(L.TV.futebol.miss, rng), now);
@@ -876,8 +876,8 @@ export class Social {
     const [a, b] = ps;
     const ca = this.charOf(a);
     const cb = this.charOf(b);
-    const pa = ca ? personaFor(ca.info.seed) : null;
-    const pb = cb ? personaFor(cb.info.seed) : null;
+    const pa = ca ? personaOf(ca.info) : null;
+    const pb = cb ? personaOf(cb.info) : null;
     const aWins = rng() < winChance(pa?.skill ?? 0.5, pb?.skill ?? 0.5);
     const [w, l] = aWins ? [a, b] : [b, a];
     g.score[aWins ? 0 : 1]++;
@@ -903,7 +903,7 @@ export class Social {
     const [a, b] = ps;
     const pa = this.charOf(a);
     const pb = this.charOf(b);
-    const aWins = rng() < winChance(pa ? personaFor(pa.info.seed).skill : 0.5, pb ? personaFor(pb.info.seed).skill : 0.5);
+    const aWins = rng() < winChance(pa ? personaOf(pa.info).skill : 0.5, pb ? personaOf(pb.info).skill : 0.5);
     const i = aWins ? 0 : 1;
     g.score[i]++;
     const scorer = aWins ? a : b;
@@ -979,7 +979,7 @@ export class Social {
     let best = -1;
     for (const m of pool) {
       const c = this.charOf(m);
-      const s = (c ? personaFor(c.info.seed).sociability : 0.5) + rng();
+      const s = (c ? personaOf(c.info).sociability : 0.5) + rng();
       if (s > best) {
         best = s;
         speaker = m;
@@ -987,7 +987,7 @@ export class Social {
     }
     const c = this.charOf(speaker);
     if (!c) return;
-    const p = personaFor(c.info.seed);
+    const p = personaOf(c.info);
     const { line, topic } = this.topicLine(g, c, p, now);
     g.lastSpeaker = speaker.id;
     this.act(speaker, 'talk', speaker.pose === 'sit' ? speaker.held : 'none', 1_700, now);
@@ -1045,8 +1045,8 @@ export class Social {
       return;
     }
     if (g.step === 3) {
-      const ga = pickGesture(rng, personaFor(ca.info.seed));
-      const gb = pickGesture(rng, personaFor(cb.info.seed));
+      const ga = pickGesture(rng, personaOf(ca.info));
+      const gb = pickGesture(rng, personaOf(cb.info));
       g.gestures = [ga, gb];
       this.act(a, 'rps', ga, 2_200, now);
       this.act(b, 'rps', gb, 2_200, now);
@@ -1086,7 +1086,7 @@ export class Social {
       if (wc) g.pending.push({ id: wc.id, at: now + 600, text: L.pick(L.RPS.watch, rng) });
       this.settle(g, w, l, now);
       // revanche: quem perdeu e é de competição/apostas pede mais uma (se ainda tem moedinhas)
-      const lp = personaFor(cl.info.seed);
+      const lp = personaOf(cl.info);
       const keen = hasTrait(lp, 'competicao') || hasTrait(lp, 'apostas');
       if (keen && g.rematches < 1 && rng() < 0.6 && (!g.bet || this.wallets.coins(cl.id) >= 1)) {
         g.rematches++;
@@ -1177,12 +1177,12 @@ export class Social {
   info(id: string): AgentSocial | null {
     const ch = this.sim.chars.get(id);
     if (!ch) return null;
-    const p = personaFor(ch.info.seed);
+    const p = personaOf(ch.info);
     const w = this.wallets.get(id);
     const bonds: AgentSocial['bonds'] = [];
     for (const o of this.sim.chars.values()) {
       if (o === ch || o.leaving || o.gone) continue;
-      const kind = bondBetween(ch.info.seed, o.info.seed);
+      const kind = bondOf(ch.info, o.info);
       if (kind) bonds.push({ id: o.id, name: o.info.name, kind, record: w?.vs[o.id] ? [w.vs[o.id][0], w.vs[o.id][1]] : null });
     }
     bonds.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'amizade' ? -1 : 1));

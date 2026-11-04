@@ -4,6 +4,7 @@
 // Regra de evolução: mudanças aqui devem ser ADITIVAS (campos opcionais novos).
 // Renomear/remover campos quebra servidor, mundo e UI ao mesmo tempo.
 
+import type { DeclaredPersona } from './persona';
 import type { AppearanceParts } from './appearance';
 import type { WorldMeta } from './world/api';
 
@@ -178,6 +179,8 @@ export interface AgentInfo {
   identity?: string;
   /** Fork Ordahi: sessão em paralelo de um agente com identidade fixa; o valor é o nome da identidade. */
   helperOf?: string;
+  /** Fork Ordahi: personalidade declarada na identidade (shared/persona.ts); o que faltar vem da semente. */
+  persona?: DeclaredPersona;
   /** Fork Ordahi: agente de fora (server/sources/external.ts); o valor diz de onde, ex.: "Hermes · VPS". */
   remote?: string;
   /** Subagente rodando em segundo plano. */

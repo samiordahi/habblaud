@@ -13,7 +13,7 @@ import type { SpotDef, SpotKind } from '../layout/types';
 import { PathFinder } from '../path/astar';
 import { BLOCKED, FREE, SEAT } from '../path/grid';
 import { PROGRAM_SEED } from '../social/gathering';
-import { hasTrait, personaFor, soloWeights } from '../social/persona';
+import { hasTrait, personaOf, soloWeights } from '../social/persona';
 import { Social } from '../social/social';
 import { browserStorage, type StorageLike } from '../social/wallet';
 import {
@@ -1213,7 +1213,7 @@ export class Sim {
       if (!ch.nextSocialAt) ch.nextSocialAt = now + idleSitMs(ch.rng, this.options().liveliness) * 1.3;
       if (now >= ch.nextSocialAt) {
         ch.nextSocialAt = now + idleSitMs(ch.rng, this.options().liveliness) * 1.3;
-        const p = personaFor(ch.info.seed);
+        const p = personaOf(ch.info);
         if (this.social.hasCompany(ch, now) && ch.rng() < 0.5 + p.sociability * 0.4 && this.social.tryInitiate(ch, now, true)) return true;
       }
     }
@@ -1480,7 +1480,7 @@ export class Sim {
   private planOuting(ch: Character, now: number): boolean {
     const near = { tx: ch.tx, ty: ch.ty };
     const rng = ch.rng;
-    const persona = personaFor(ch.info.seed);
+    const persona = personaOf(ch.info);
     // colegas à toa: a vontade é de companhia (a personalidade dosa) — TV, jogo, papo, aposta...
     if (this.social.hasCompany(ch, now) && rng() < 0.45 + persona.sociability * 0.4 && this.social.tryInitiate(ch, now, false)) return true;
     const avail: Partial<Record<IdleActivity, boolean>> = {

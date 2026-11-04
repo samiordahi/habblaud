@@ -1,6 +1,8 @@
 // Personalidades dos personagens — funções PURAS e determinísticas (mesma semente = mesma pessoa em
 // qualquer navegador). Cada agente tem 2 ou 3 traços, que mudam o que prefere fazer quando está à toa,
 // com quem anda e o que fala; pares de agentes podem ter amizade ou rivalidade.
+import { nameKey } from '../../../../shared/appearance';
+import type { AgentInfo } from '../../../../shared/types';
 import { mulberry32 } from '../../../../shared/hash';
 import { IDLE_WEIGHTS, type IdleActivity } from '../sim/behavior';
 import { tr } from '../../../../shared/i18n';
@@ -81,6 +83,24 @@ export function hasTrait(p: Persona, t: TraitId): boolean {
 }
 
 export type Bond = 'amizade' | 'rivalidade';
+
+type PersonaSource = Pick<AgentInfo, 'seed' | 'persona'>;
+
+/** Fork Ordahi: a personalidade do agente: a da semente, com o que foi declarado na identidade por cima. */
+export function personaOf(info: PersonaSource): Persona {
+  const base = personaFor(info.seed);
+  const d = info.persona;
+  if (!d?.traits && !d?.catchphrase) return base;
+  return { ...base, ...(d.traits ? { traits: d.traits } : {}), ...(d.catchphrase ? { catchphrase: d.catchphrase } : {}) };
+}
+
+/** Fork Ordahi: vínculo declarado (por nome, valendo de qualquer dos lados); sem declaração, o da semente. */
+export function bondOf(a: PersonaSource & Pick<AgentInfo, 'name'>, b: PersonaSource & Pick<AgentInfo, 'name'>): Bond | null {
+  const lists = (x: typeof a, y: typeof a, pick: 'friends' | 'rivals') => x.persona?.[pick]?.some((n) => nameKey(n) === nameKey(y.name)) ?? false;
+  if (lists(a, b, 'rivals') || lists(b, a, 'rivals')) return 'rivalidade';
+  if (lists(a, b, 'friends') || lists(b, a, 'friends')) return 'amizade';
+  return bondBetween(a.seed, b.seed);
+}
 
 /**
  * Vínculo entre dois agentes (simétrico): ~22% amizade, ~12% rivalidade, o resto só colegas.
