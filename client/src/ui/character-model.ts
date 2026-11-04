@@ -82,15 +82,18 @@ const STYLE_LABELS: Partial<Record<PartKey, Readonly<Record<string, string>>>> =
     short: tr('Curto'), buzz: tr('Raspado'), spiky: tr('Espetado'), side_part: tr('Repartido'), curly: tr('Cacheado'), afro: tr('Black power'),
     bob: tr('Chanel'), long: tr('Longo'), ponytail: tr('Rabo de cavalo'), bun: tr('Coque'), pigtails: 'Maria-chiquinha', mohawk: tr('Moicano'),
     bald: tr('Careca'), wavy: tr('Ondulado'),
+    braids: tr('Tranças'), dreads: 'Dreads', fringe: tr('Franja'), undercut: 'Undercut', space_buns: tr('Dois coques'),
   },
   topStyle: {
     tshirt: tr('Camiseta'), hoodie: tr('Moletom'), shirt_tie: tr('Camisa e gravata'), sweater: tr('Suéter'), jacket: tr('Jaqueta'),
     blouse: tr('Blusa'), polo: 'Polo',
+    blazer: 'Blazer', tank: tr('Regata'), striped: tr('Listrada'), dress: tr('Vestido'),
   },
-  bottomStyle: { pants: tr('Calça'), shorts: tr('Bermuda'), skirt: tr('Saia') },
+  bottomStyle: { pants: tr('Calça'), shorts: tr('Bermuda'), skirt: tr('Saia'), long_skirt: tr('Saia longa') },
   accessory: {
     none: tr('Nenhum'), glasses: tr('Óculos'), sunglasses: tr('Óculos escuros'), headphones: tr('Fone'), cap: tr('Boné'), beanie: tr('Gorro'),
     earrings: tr('Brincos'), bow: tr('Laço'),
+    round_glasses: tr('Óculos redondos'), hat: tr('Chapéu'), headband: tr('Faixa'), scarf: tr('Cachecol'), necklace: tr('Colar'), hoops: tr('Argolas'),
   },
   facialHair: { none: tr('Sem barba'), stubble: tr('Por fazer'), beard: tr('Barba'), mustache: tr('Bigode'), goatee: tr('Cavanhaque') },
 };
@@ -100,7 +103,7 @@ export function styleLabel(key: PartKey, value: string): string {
   return STYLE_LABELS[key]?.[value] ?? value;
 }
 
-/** A linha aparece com esta aparência? (sem acessório, não há cor de acessório para escolher) */
-export function rowVisible(r: EditorRow, a: Pick<Appearance, 'accessory'>): boolean {
-  return !(r.key === 'accessoryColor' && a.accessory === 'none');
+/** A linha aparece com esta aparência? (sem acessório, não há cor de acessório; o vestido usa a cor da parte de cima) */
+export function rowVisible(r: EditorRow, a: Pick<Appearance, 'accessory'> & Partial<Pick<Appearance, 'topStyle'>>): boolean {
+  return !(r.key === 'accessoryColor' && a.accessory === 'none') && !(r.key === 'bottom' && a.topStyle === 'dress');
 }

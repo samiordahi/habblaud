@@ -366,6 +366,7 @@ export class Office {
     if (titular) {
       info.identity = titular.name;
       if (titular.parts) info.parts = { ...titular.parts };
+      if (titular.persona) info.persona = { ...titular.persona };
     } else if (ident) {
       info.helperOf = ident.name;
     } else if (chosen) {
@@ -914,6 +915,81 @@ export class Office {
     info.look = person.look;
     info.seed = hash32(info.id);
     delete info.parts;
+    delete info.persona;
+    this.markDirty();
+  }
+
+  /** Fork Ordahi: o agente passa a ser a identidade, com o nome, a aparência e a personalidade dela. */
+  private wear(info: AgentInfo, ident: Identity): void {
+    delete info.helperOf;
+    delete info.custom;
+    info.identity = ident.name;
+    info.name = ident.name;
+    info.look = ident.look;
+    info.seed = ident.seed;
+    if (ident.parts) info.parts = { ...ident.parts };
+    else delete info.parts;
+    if (ident.persona) info.persona = { ...ident.persona };
+    else delete info.persona;
+  }
+
+  /** Fork Ordahi: veste um agente que já está na sala (os de fora: a identidade deles vem da fonte). */
+  wearIdentity(id: string, ident: Identity): void {
+    const rec = this.agents.get(id);
+    if (!rec) return;
+    this.wear(rec.info, ident);
+    this.markDirty();
+  }
+
+  /**
+   * Fork Ordahi: o arquivo de identidades mudou pela tela de Personagens. Quem já está na sala se ajusta na hora, sem
+   * esperar a próxima sessão: a titular veste o que mudou, quem perdeu a regra volta ao sorteio e identidade nova vai
+   * para a sessão dela (em casa primeiro, depois a mais antiga). `renamed` carrega o nome de antes para o de agora.
+   */
+  reconcileIdentities(renamed?: readonly [string, string]): void {
+    const wanted = (info: AgentInfo) => this.deps.identity?.(info.provider ?? 'claude', this.roomPath(info.roomId) ?? info.roomId);
+    const follow = (name: string) => (renamed && name === renamed[0] ? renamed[1] : name);
+    const locals = [...this.agents.values()].filter((r) => r.info.kind === 'main' && r.removeAt === undefined && !r.info.remote);
+    const worn = new Set<string>();
+    for (const r of locals) {
+      const info = r.info;
+      if (!info.identity) continue;
+      const name = follow(info.identity);
+      const want = wanted(info);
+      if (want?.name === name) {
+        if (info.name !== name) this.notice('character', info.id, 'info', tr('🪪 {0} assumiu como {1}', [info.name, name]), info.roomId);
+        this.wear(info, want);
+        worn.add(name);
+      } else {
+        this.demoteHolder(r, name);
+        delete info.helperOf;
+      }
+    }
+    const rest = locals.filter((r) => !r.info.identity);
+    const atHomeFirst = (r: AgentRecord, ident: Identity) => (atHome(ident, this.roomPath(r.info.roomId) ?? r.info.roomId) ? 0 : 1);
+    for (const r of rest) {
+      delete r.info.helperOf;
+    }
+    const groups = new Map<string, { ident: Identity; list: AgentRecord[] }>();
+    for (const r of rest) {
+      const want = wanted(r.info);
+      if (!want) continue;
+      const g = groups.get(want.name) ?? { ident: want, list: [] };
+      g.list.push(r);
+      groups.set(want.name, g);
+    }
+    for (const { ident, list } of groups.values()) {
+      list.sort((a, b) => atHomeFirst(a, ident) - atHomeFirst(b, ident) || a.info.startedAt - b.info.startedAt);
+      for (const r of list) {
+        if (worn.has(ident.name)) {
+          r.info.helperOf = ident.name;
+          continue;
+        }
+        this.notice('character', r.info.id, 'info', tr('🪪 {0} assumiu como {1}', [r.info.name, ident.name]), r.info.roomId);
+        this.wear(r.info, ident);
+        worn.add(ident.name);
+      }
+    }
     this.markDirty();
   }
 
@@ -942,13 +1018,7 @@ export class Office {
       return;
     }
     const before = info.name;
-    delete info.helperOf;
-    info.identity = ident.name;
-    info.name = ident.name;
-    info.look = ident.look;
-    info.seed = ident.seed;
-    if (ident.parts) info.parts = { ...ident.parts };
-    else delete info.parts;
+    this.wear(info, ident);
     this.notice('character', info.id, 'info', tr('🪪 {0} assumiu como {1}', [before, ident.name]), info.roomId);
     this.markDirty();
   }

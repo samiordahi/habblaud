@@ -38,6 +38,44 @@ O Habblaud original dá um personagem sorteado a cada sessão. Aqui, cada ferram
 O arquivo é relido quando muda; sem ele, tudo volta ao sorteio do Habblaud. Código em `server/model/identities.ts`,
 testes em `server/model/identities.test.ts`.
 
+## A tela de Personagens
+
+O botão de pessoas na barra do topo abre a tela, na sala direta e dentro do painel, sem depender do Habblaud World. Ela
+cria, muda e apaga as identidades fixas, e grava em `~/.habblaud/identidades.json`, que continua sendo a fonte: dá para
+seguir editando o arquivo à mão. O lápis da gaveta, num personagem fixo ou num ajudante dele, abre a tela no personagem.
+Num agente sorteado, segue editando o personagem do projeto.
+
+- **Aparência:** o mesmo editor do World (`AppearanceFields`), com `office: true`, que libera as peças só do escritório
+  e a cor livre. As 13 peças vão todas para o arquivo: a aparência fica fixa e a semente sobra para a personalidade.
+- **Personalidade:** 2 ou 3 traços, bordão e amizades e rivalidades, no campo `personalidade`. Traços e bordão iguais
+  aos da semente não são declarados. Vínculo vale nos dois sentidos, e o arquivo guarda dos dois lados.
+- **Ligação:** Claude ou Codex (com pasta opcional), um perfil que a ponte do Hermes mostrou, ou Guardado
+  (`ferramenta: "nenhuma"`), que fica na tela e não entra em sala. Perfil novo se cria no Hermes, não aqui.
+
+```json
+{ "nome": "Sofia", "ferramenta": "claude", "pasta": "Evolua", "look": "f", "seed": 9, "parts": { },
+  "personalidade": { "tracos": ["calma", "leitura"], "bordao": "Bora organizar!", "amigos": ["Tars"], "rivais": [] } }
+```
+
+Rotas: `GET/PUT /api/personagens` e `DELETE /api/personagens/:nome`, só pelo próprio computador (mesma trava do
+personagem do projeto), nunca pelo celular. Regras em `saveCharacter`/`removeCharacter` (`server/model/identities.ts`):
+nome e ligação não repetem, regra com pasta vai à frente da geral, entrada fora do formato fica como está. Grava por
+arquivo temporário e troca, com a versão anterior em `identidades.json.bak`; arquivo ilegível nunca é sobrescrito.
+
+Ao salvar, quem está na sala veste a mudança na hora (`Office.reconcileIdentities`, `ExternalSource.refreshIdentities`):
+a titular troca de roupa, quem perdeu a regra volta ao sorteio e identidade nova vai para a sessão dela.
+
+### O que nunca sobe ao World
+
+Peças novas ficam em `OFFICE_*` (`shared/appearance.ts`), fora das listas do World. O servidor do mundo recusa o pacote
+inteiro com peça ou cor fora das listas dele, então `flattenAppearance` passa por `toWorldAppearance`: peça do escritório
+vira a equivalente e cor livre vira a da paleta mais próxima. Só reduz: o mundo vê menos, nunca algo diferente do agente.
+O tipo de retorno é o do protocolo, para o compilador acusar quem tentar pular essa porta. `personalidade` não entra na
+projeção. O editor do personagem do mundo segue fechado nas listas dele (`parseWorldParts`).
+
+Peça nova: acrescente em `OFFICE_*`, desenhe em `client/src/art/character/` (o tipo obriga), dê o rótulo em
+`character-model.ts` e a equivalente em `WORLD_*` (`shared/world/appearance-flat.ts`).
+
 ## Agentes de fora: a ponte com o AIOS
 
 O Hermes roda na VPS, e com ele os perfis Tars, Bella Banker e Stella Sales. Quem lê a VPS é o painel do AIOS

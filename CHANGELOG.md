@@ -14,6 +14,18 @@ do meio (0.**3**.0).
 
 - **Fork Ordahi: aprovar pedidos do AIOS pela sala.** Os arquivos de `requests/` em `estado: esperando` viram o cartão
   **Pede sua aprovação** no agente do perfil, com o texto na íntegra, sem prazo, e a decisão volta ao arquivo.
+- **Fork Ordahi: tela de Personagens.** O botão de pessoas na barra cria, muda e apaga os personagens fixos sem depender
+  do Habblaud World, ligando cada um ao Claude, ao Codex, a um perfil do Hermes ou deixando guardado. Quem está na sala
+  veste a mudança na hora.
+- **Fork Ordahi: mais opções no personagem.** Cor livre em cada peça; cinco cabelos, quatro roupas, saia longa e seis
+  acessórios novos, só no escritório; e personalidade própria, com traços, bordão, amizades e rivalidades.
+
+### Corrigido
+
+- **Os óculos parecem óculos.** A armação passava por cima do olho e virava uma barra na testa. Agora ela contorna o
+  olho, com lente clara, nas três vistas; os óculos escuros ganharam o mesmo desenho.
+- **Fork Ordahi: cor fora da paleta não derruba o prédio no mundo.** Cor livre e peça do escritório viram a mais próxima
+  antes de subir ao Habblaud World, que recusa o pacote inteiro com o que não conhece.
 
 ## [1.0.3] - 2026-10-16
 

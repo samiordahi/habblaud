@@ -69,6 +69,8 @@ export interface UiContext {
   toggleSettings(): void;
   /** Abre/fecha a janela do Habblaud World (o botão da barra do topo; ui/world/world-dialog.ts). */
   toggleWorld(): void;
+  /** Fork Ordahi: abre a tela de Personagens, no personagem `name` se houver (ui/characters.ts). */
+  openCharacters?(name?: string, agentId?: string): void;
   /** Abre o campo de renomear a sala perto do ponto (px da janela); botão direito na sala (ui/roomrename.ts). */
   renameRoom?(roomId: string, at: { x: number; y: number }): void;
   /**

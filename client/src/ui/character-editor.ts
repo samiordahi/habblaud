@@ -31,14 +31,14 @@ export class CharacterEditor {
   private look: 'f' | 'm' = 'f';
   /** Aparência sorteada pela seed (sem peças): o que não mudar não vai em `parts`. */
   private base: Appearance | null = null;
-  private readonly fields = new AppearanceFields();
+  private readonly fields = new AppearanceFields(undefined, { office: true });
   private readonly nameInput: HTMLInputElement;
   private readonly error: HTMLElement;
   private readonly saveBtn: HTMLButtonElement;
   private readonly resetBtn: HTMLButtonElement;
 
   constructor(private ctx: UiContext) {
-    this.button = iconButton(ICONS.pencil, tr('Editar personagem'), () => (this.editing ? this.cancel() : this.start()), 'ui-icon-btn--sm ui-char-edit');
+    this.button = iconButton(ICONS.pencil, tr('Editar personagem'), () => this.onPencil(), 'ui-icon-btn--sm ui-char-edit');
     setAttr(this.button, 'aria-expanded', 'false');
     this.button.hidden = true;
 
@@ -86,6 +86,15 @@ export class CharacterEditor {
       if (!live || a.status === 'offline') this.ctx.announce(tr('O agente saiu do escritório.'));
     }
     if (this.editing && !this.confirmingReset) setHidden(this.resetBtn, !a.custom);
+  }
+
+  /** Fork Ordahi: personagem fixo muda na tela de Personagens; a edição aqui sumiria na sessão seguinte. */
+  private onPencil(): void {
+    const a = this.ctx.agent(this.agentId);
+    const fixed = a?.identity ?? a?.helperOf;
+    if (fixed) return void this.ctx.openCharacters?.(fixed, a?.identity ? a.id : undefined);
+    if (this.editing) this.cancel();
+    else this.start();
   }
 
   private start(): void {

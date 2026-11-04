@@ -143,6 +143,7 @@ export class HelpDialog {
             h('li', { text: tr('Arraste o escritório para mover a câmera e use a rolagem do mouse (ou pinça) para dar zoom.') }),
             h('li', { text: tr('Clique em um personagem ou sala para ver os detalhes; duplo clique aproxima a câmera.') }),
             h('li', { text: tr('Passe o mouse sobre um personagem para ver o que ele está fazendo.') }),
+            h('li', { text: tr('O botão de pessoas na barra do topo abre os Personagens: dá para criar, mudar e ligar cada um a um agente, e quem está na sala veste a mudança na hora.') }),
             h('li', {
               text: tr('Nos detalhes de um agente, “Abrir terminal” mostra a conversa da sessão como no Claude Code (ou no Codex), ao vivo (precisa do acesso local, bind 127.0.0.1).'),
             }),

@@ -19,7 +19,7 @@ import { DayStatsService } from './history/daystats';
 import { describeStateMigration, legacyEnvWarning, migrateLegacyStateDir } from './legacy';
 import { errMsg, log } from './log';
 import { NameStore } from './model/names';
-import { IdentityFile } from './model/identities';
+import { IdentityFile, removeCharacter, saveCharacter, type CharacterChange } from './model/identities';
 import { ExternalSource } from './sources/external';
 import { Office } from './model/office';
 import { RoomAliases } from './model/room-aliases';
@@ -351,7 +351,21 @@ const ticker = setInterval(() => {
   }
 }, 250);
 
+// Fork Ordahi: tela de Personagens. O arquivo muda e quem está na sala veste a mudança na hora.
+const afterCharacters = (r: CharacterChange): CharacterChange => {
+  if (r.ok) {
+    office.reconcileIdentities(r.renamed);
+    external?.refreshIdentities();
+  }
+  return r;
+};
+
 const api = createApiHandler({
+  characters: {
+    list: () => ({ personagens: identities.entries(), perfis: external?.known() ?? [] }),
+    save: (previous, raw) => afterCharacters(identities.change((list) => saveCharacter(list, previous, raw))),
+    remove: (name) => afterCharacters(identities.change((list) => removeCharacter(list, name))),
+  },
   renameRoom: (id, name) => {
     const path = office.roomPath(id);
     if (!path) return undefined;

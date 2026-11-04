@@ -1,6 +1,7 @@
 // Rotas da API (/api/*). Respostas JSON; rotas desconhecidas -> 404 JSON.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { NAME_MAX, parseAppearanceParts, parseCharacterName, parseSeed } from '../../shared/appearance';
+import type { CharacterChange, CharacterEntry } from '../model/identities';
 import type { AccessInfo, AgentInfo, ModSummary, OfficeSnapshot, SourceInfo, UpdateStatus } from '../../shared/types';
 import type { AccountsService } from '../accounts/service';
 import { handleCodexEvent } from '../codex/http';
@@ -75,6 +76,8 @@ export interface ApiDeps {
   deliveries?: DeliveryIndex;
   /** Quem lê os arquivos das entregas (e, para o auxiliar do host, /api/host/files/*; deliveries/fetcher.ts). */
   files?: FileFetcher;
+  /** Fork Ordahi: tela de Personagens (GET/PUT /api/personagens, DELETE /api/personagens/:nome; model/identities.ts). */
+  characters?: CharacterService;
   /** Renomeia a sala (POST /api/rooms/rename {id, name}; vazio volta ao padrão). Devolve o nome em uso, ou undefined se a sala não existe. */
   renameRoom?: (id: string, name: string) => string | undefined;
   /** Estatísticas do "Meu dia" (GET /api/stats, http/stats.ts). */
@@ -96,6 +99,13 @@ export interface ApiDeps {
   world?: (req: IncomingMessage, res: ServerResponse, url: URL) => void;
 }
 
+/** Fork Ordahi: o que a tela de Personagens lê e grava. */
+export interface CharacterService {
+  list(): { personagens: CharacterEntry[]; perfis: readonly { chave: string; nome: string }[] };
+  save(previous: string | undefined, raw: unknown): CharacterChange;
+  remove(name: string): CharacterChange;
+}
+
 /** GET /api/agents/:id/terminal (ids nunca contêm '/'). */
 const TERMINAL_ROUTE = /^\/api\/agents\/([^/]+)\/terminal$/;
 /** POST /api/agents/:id/stop|takeover (terminal interativo). */
@@ -103,6 +113,8 @@ const AGENT_ACTION_ROUTE = /^\/api\/agents\/[^/]+\/(stop|takeover)$/;
 
 /** PUT|DELETE /api/agents/:id/character: personagem do projeto (ver Office.setCharacter). */
 const CHARACTER_ROUTE = /^\/api\/agents\/([^/]+)\/character$/;
+/** Fork Ordahi: /api/personagens e /api/personagens/:nome, os personagens fixos. */
+const CHARACTERS_ROUTE = /^\/api\/personagens(?:\/([^/]+))?$/;
 const NOT_EDITABLE = tr('agente não encontrado: só o agente principal de uma sessão aberta tem personagem editável');
 
 /** Conexão vinda do próprio computador (127.x, ::1 ou ::ffff:127.x). */
@@ -305,6 +317,22 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
     sendJson(res, 200, { ok: true });
   };
 
+  const handleCharacters = async (req: IncomingMessage, res: ServerResponse, service: CharacterService, name: string | undefined, method: string) => {
+    if (method === 'GET') {
+      req.resume();
+      return sendJson(res, 200, service.list());
+    }
+    const done = (r: CharacterChange) => (r.ok ? sendJson(res, 200, { ok: true }) : sendJson(res, r.status, { error: r.error }));
+    if (method === 'DELETE') {
+      req.resume();
+      if (!name) throw new HttpError(400, tr('falta o nome do personagem'));
+      return done(service.remove(name));
+    }
+    const body = (await readJson(req)) as { anterior?: unknown; personagem?: unknown } | null;
+    const previous = typeof body?.anterior === 'string' ? body.anterior : undefined;
+    done(service.save(previous, body?.personagem));
+  };
+
   /**
    * Rodada do auxiliar do host: com `?wait=1`, a resposta espera trabalho (até HOST_WAIT_MS). Devolve undefined se a
    * conexão caiu enquanto esperava (nada sai da fila).
@@ -457,6 +485,28 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       if (isRemote(req)) sendJson(res, 403, { error: tr('o terminal interativo só pode ser usado no próprio computador') });
       else if (!deps.pty) sendJson(res, 403, { error: tr('terminal interativo desligado (veja o log do servidor)') });
       else deps.pty(req, res, path);
+      return true;
+    }
+    const charactersMatch = CHARACTERS_ROUTE.exec(path);
+    if (charactersMatch) {
+      // Fork Ordahi: muda o que cada agente é na sala, a mesma trava do personagem do projeto. Nunca pelo celular.
+      const name = charactersMatch[1];
+      const allowed = name ? method === 'DELETE' : method === 'GET' || method === 'PUT';
+      if (!allowed) methodNotAllowed(res, name ? 'DELETE' : 'GET, PUT');
+      else if (!deps.characters || !deps.terminal) {
+        sendJson(res, 403, { error: tr('editar o personagem desligado: só funciona com o Habblaud acessível apenas pelo próprio computador') });
+      } else if (!trusted(req)) {
+        sendJson(res, 403, { error: denied(req, tr('o personagem só é editado pelo próprio computador (http://localhost ou http://127.0.0.1)')) });
+      } else {
+        let decoded: string | undefined;
+        try {
+          decoded = name ? decodeURIComponent(name) : undefined;
+        } catch {
+          sendJson(res, 400, { error: tr('id inválido') });
+          return true;
+        }
+        handleCharacters(req, res, deps.characters, decoded, method).catch((err) => fail(res, err));
+      }
       return true;
     }
     const characterMatch = CHARACTER_ROUTE.exec(path);

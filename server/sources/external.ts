@@ -157,6 +157,8 @@ export class ExternalSource {
   /** Último texto de atividade publicado por agente, para não repetir no feed a cada consulta. */
   private readonly lastText = new Map<string, string>();
   private readonly present = new Set<string>();
+  /** Fork Ordahi: os agentes do último retrato, para a tela de Personagens oferecer os perfis que existem. */
+  private roster: { chave: string; nome: string }[] = [];
 
   private requests: ExternalRequestSink | undefined;
 
@@ -216,9 +218,24 @@ export class ExternalSource {
     }
   }
 
+  /** Os perfis que a ponte mostrou por último (a chave é o `id` dela). */
+  known(): readonly { chave: string; nome: string }[] {
+    return this.roster;
+  }
+
+  /** O arquivo de identidades mudou: quem está na sala veste a identidade atual, ou volta ao nome da ponte. */
+  refreshIdentities(): void {
+    for (const a of this.roster) {
+      const id = PREFIX + a.chave;
+      if (!this.present.has(id)) continue;
+      this.opts.office.wearIdentity(id, this.opts.identity(a.chave) ?? { name: a.nome, provider: 'external', key: a.chave, look: 'm', seed: hash32(a.chave) });
+    }
+  }
+
   /** Aplica um retrato ao escritório; null = a ponte caiu e todos os externos saem. */
   apply(feed: ExternalFeed | null): void {
     const { office } = this.opts;
+    if (feed) this.roster = feed.agentes.map((a) => ({ chave: a.id, nome: a.nome }));
     const now = (this.opts.now ?? Date.now)();
     const live = new Set<string>();
     for (const a of feed?.agentes ?? []) {

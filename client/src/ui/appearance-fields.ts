@@ -3,13 +3,21 @@
 // World (world/settings-world.ts). Quem usa guarda o nome, salva e decide o que mandar; aqui só se escolhe a aparência.
 import type { PartKey } from '../../../shared/appearance';
 import { characterSprite, editorConflict, editorOptions, fitToOptions } from '../art';
-import type { Appearance } from '../art/api';
+import type { Appearance, Dir } from '../art/api';
 import { EDITOR_GROUPS, rowVisible, styleLabel, type EditorRow } from './character-model';
+import { ColorPicker } from './color-picker';
 import { h } from './dom';
 import { tr } from '../../../shared/i18n';
 
 /** Pixels de tela por pixel do personagem na prévia. */
 const PREVIEW_SCALE = 4;
+const TURN: readonly Dir[] = ['down', 'left', 'up', 'right'];
+
+/** Fork Ordahi: `office` libera as peças próprias e a cor livre. O personagem do mundo fica sem: lá, as listas são fechadas. */
+export interface FieldsOptions {
+  office?: boolean;
+  previewScale?: number;
+}
 
 export class AppearanceFields {
   /** Prévia de corpo inteiro (canvas). */
@@ -17,10 +25,27 @@ export class AppearanceFields {
   /** Grupos de peças (pele, cabelo...), redesenhados a cada escolha. */
   readonly groups: HTMLElement;
   private draft: Appearance | null = null;
+  private dir: Dir = 'down';
+  /** Linha com o seletor de cor aberto. */
+  private colorKey: PartKey | null = null;
+  private readonly picker: ColorPicker;
 
-  constructor(private readonly onChange: (a: Appearance) => void = () => {}) {
+  constructor(
+    private readonly onChange: (a: Appearance) => void = () => {},
+    private readonly options: FieldsOptions = {},
+  ) {
     this.preview = h('canvas', { class: 'ui-char__preview', role: 'img', attrs: { 'aria-label': tr('Prévia do personagem') } });
     this.groups = h('div', { class: 'ui-char__groups' });
+    this.picker = new ColorPicker(
+      (hex) => this.colorLive(hex),
+      () => this.paint(),
+    );
+  }
+
+  /** Mostra a prévia pelo próximo lado (frente, perfil, costas, outro perfil). */
+  turn(): void {
+    this.dir = TURN[(TURN.indexOf(this.dir) + 1) % TURN.length];
+    if (this.draft) this.drawPreview(this.draft);
   }
 
   /** Aparência em edição (null antes do primeiro `set`). */
@@ -31,14 +56,32 @@ export class AppearanceFields {
   /** Troca a aparência inteira (começo da edição, "Sortear") e redesenha. */
   set(a: Appearance): void {
     this.draft = a;
+    this.colorKey = null;
     this.paint();
   }
 
   private pick(key: PartKey, value: string): void {
     if (!this.draft) return;
-    this.draft = fitToOptions({ ...this.draft, [key]: value });
+    this.draft = fitToOptions({ ...this.draft, [key]: value }, this.options);
+    if (this.colorKey === key) this.picker.set(value);
     this.paint(key);
     this.onChange(this.draft);
+  }
+
+  /** Cor mudando no seletor: redesenha só a prévia e a amostra, para não refazer o seletor no meio do arrasto. */
+  private colorLive(hex: string): void {
+    const key = this.colorKey;
+    if (!this.draft || !key) return;
+    this.draft = { ...this.draft, [key]: hex };
+    this.drawPreview(this.draft);
+    this.groups.querySelector<HTMLElement>(`[data-key="${key}"] [aria-checked="true"]`)?.style.setProperty('--swatch', hex);
+    this.onChange(this.draft);
+  }
+
+  private toggleColor(key: PartKey): void {
+    this.colorKey = this.colorKey === key ? null : key;
+    if (this.colorKey && this.draft) this.picker.set(this.draft[key] ?? '#000000');
+    this.paint();
   }
 
   /** Redesenha a prévia e as opções; `focusKey` devolve o foco à opção marcada daquela linha. */
@@ -46,7 +89,7 @@ export class AppearanceFields {
     const a = this.draft;
     if (!a) return;
     this.drawPreview(a);
-    const options = editorOptions(a);
+    const options = editorOptions(a, this.options);
     this.groups.replaceChildren(
       ...EDITOR_GROUPS.map((g) =>
         h(
@@ -63,7 +106,10 @@ export class AppearanceFields {
   private row(group: string, r: EditorRow, a: Appearance, values: readonly string[]): HTMLElement {
     const current = a[r.key] ?? '';
     const isColor = r.kind === 'color';
-    const buttons = values.map((v) => {
+    const free = isColor && this.options.office === true;
+    // Cor livre que está em uso entra na linha, para aparecer marcada.
+    const shown = free && current && !values.includes(current) ? [...values, current] : values;
+    const buttons = shown.map((v) => {
       const conflict = editorConflict(a, r.key, v);
       const label = isColor ? v : styleLabel(r.key, v);
       return h('button', {
@@ -84,8 +130,19 @@ export class AppearanceFields {
       { class: `ui-char__opts ui-char__opts--${r.kind}`, role: 'radiogroup', attrs: { 'aria-label': `${group}: ${r.label}`, 'data-key': r.key } },
       ...buttons,
     );
-    list.addEventListener('keydown', (ev) => this.onRadioKey(ev, buttons, r.key, values));
-    return h('div', { class: 'ui-char__row' }, h('span', { class: 'ui-char__row-label', text: r.label }), list);
+    list.addEventListener('keydown', (ev) => this.onRadioKey(ev, buttons, r.key, shown));
+    const open = this.colorKey === r.key;
+    const more = free
+      ? h('button', {
+          class: 'ui-char__more',
+          type: 'button',
+          text: '+',
+          title: tr('Escolher qualquer cor'),
+          attrs: { 'aria-label': tr('Escolher qualquer cor: {0}', [`${group}, ${r.label}`]), 'aria-expanded': String(open) },
+          on: { click: () => this.toggleColor(r.key) },
+        })
+      : '';
+    return h('div', { class: 'ui-char__row' }, h('span', { class: 'ui-char__row-label', text: r.label }), h('div', { class: 'ui-char__line' }, list, more), open ? this.picker.el : '');
   }
 
   /** Setas mudam a escolha dentro da linha (padrão de radiogroup), pulando opções desabilitadas. */
@@ -103,10 +160,11 @@ export class AppearanceFields {
 
   private drawPreview(a: Appearance): void {
     try {
-      const s = characterSprite({ appearance: a, dir: 'down', pose: 'stand', frame: 0 });
+      const s = characterSprite({ appearance: a, dir: this.dir, pose: 'stand', frame: 0 });
       const c = this.preview;
-      c.width = s.canvas.width * PREVIEW_SCALE;
-      c.height = s.canvas.height * PREVIEW_SCALE;
+      const scale = this.options.previewScale ?? PREVIEW_SCALE;
+      c.width = s.canvas.width * scale;
+      c.height = s.canvas.height * scale;
       const g = c.getContext('2d');
       if (!g) return;
       g.imageSmoothingEnabled = false;

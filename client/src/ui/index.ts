@@ -17,6 +17,7 @@ import { RoomRenamer } from './roomrename';
 import { h } from './dom';
 import { Drawer } from './drawer';
 import { FeedPanel } from './feed';
+import { CharactersDialog } from './characters';
 import { HelpDialog } from './help';
 import { HistoryPopover } from './history';
 import { Deliveries } from './deliveries';
@@ -275,6 +276,9 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   help = new HelpDialog();
   const day = new DayLauncher(ctx, (el) => root.append(el));
   topbar.addPanelButton(day.button);
+  const characters = new CharactersDialog(ctx);
+  topbar.addPanelButton(characters.button);
+  ctx.openCharacters = (name, agentId) => void characters.open(name, agentId);
   // Botão direito numa sala (lista lateral ou escritório): renomear.
   const renamer = new RoomRenamer(ctx);
   ctx.renameRoom = (id, at) => renamer.open(id, at);
@@ -288,7 +292,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   const scrim = h('div', { class: 'ui-scrim', attrs: { 'aria-hidden': 'true' }, on: { click: () => ctx.togglePanel('sidebar', false) } });
 
   root.classList.add('ui-root');
-  root.append(timelapse.vignette, topbar.el, sidebar.el, scrim, feed.el, drawer.el, terminal.el, pty.el, timelapse.el, timelapse.badge, toasts.el, banner.el, update.el, empty.el, popups.el, tip.el, settings.el, worldDialog.el, history.el, deliveries.el, help.el, renamer.el, live, splash.el);
+  root.append(timelapse.vignette, topbar.el, sidebar.el, scrim, feed.el, drawer.el, terminal.el, pty.el, timelapse.el, timelapse.badge, toasts.el, banner.el, update.el, empty.el, popups.el, tip.el, settings.el, worldDialog.el, history.el, deliveries.el, help.el, characters.el, renamer.el, live, splash.el);
   area = new FreeArea(world, { root, topbar: topbar.el, sidebar: sidebar.el, drawer: drawer.el, feed: feed.el }, () => ({
     sidebar: panels.sidebar,
     feed: panels.feed,
@@ -297,7 +301,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   }));
   drawer.onLayoutChange = () => applyLayout();
 
-  const components: UiComponent[] = [topbar, sidebar, drawer, terminal, pty, history, deliveries, feed, toasts, settings, empty, banner, tip, notifier, splash, timelapse, sound, day, updateToaster, worldDialog, popups, worldChip];
+  const components: UiComponent[] = [topbar, sidebar, drawer, terminal, pty, history, deliveries, feed, toasts, settings, empty, banner, tip, notifier, splash, timelapse, sound, day, characters, updateToaster, worldDialog, popups, worldChip];
   if (scene) components.push(scene);
   root.append(worldSocial.el);
   components.push(worldSocial);
@@ -395,7 +399,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
       return;
     }
     if (e.key === 'Escape') {
-      if (help.isOpen || settings.isOpen || worldDialog.isOpen || history.isOpen) return; // diálogo/popover tratam o próprio Esc
+      if (help.isOpen || settings.isOpen || worldDialog.isOpen || history.isOpen || characters.isOpen) return; // diálogo/popover tratam o próprio Esc
       // O terminal flutua sobre tudo: fecha primeiro (a busca dele, depois ele; a gaveta continua aberta).
       if (terminal.isOpen) {
         terminal.escape();
@@ -409,7 +413,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
       }
       return;
     }
-    if (isTypingTarget(e.target) || help.isOpen || worldDialog.isOpen) return;
+    if (isTypingTarget(e.target) || help.isOpen || worldDialog.isOpen || characters.isOpen) return;
     switch (e.key) {
       case '/':
         e.preventDefault();

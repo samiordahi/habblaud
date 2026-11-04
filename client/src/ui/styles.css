@@ -11147,3 +11147,326 @@ html.is-replay #world {
 .ui-world-chip__visitors[hidden] {
   display: none;
 }
+
+/* Fork Ordahi: cor livre no editor de peças. */
+.ui-char__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ui-char__more {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px dashed var(--ui-line-strong);
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ui-muted);
+}
+
+.ui-char__more:hover,
+.ui-char__more[aria-expanded='true'] {
+  border-color: rgba(124, 200, 255, 0.6);
+  color: var(--ui-accent);
+}
+
+.ui-color {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ui-line-strong);
+  background: var(--ui-bg-soft);
+}
+
+.ui-color__area {
+  position: relative;
+  grid-row: 1 / span 2;
+  height: 96px;
+  border-radius: 4px;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, transparent),
+    hsl(var(--hue) 100% 50%);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.ui-color__area::after {
+  content: '';
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  background: var(--pick);
+}
+
+.ui-color__hue {
+  position: relative;
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.ui-color__hue::after {
+  content: '';
+  position: absolute;
+  left: var(--h);
+  top: -2px;
+  bottom: -2px;
+  width: 6px;
+  margin-left: -3px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  background: #fff;
+}
+
+.ui-color__hex {
+  align-self: end;
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--ui-line-strong);
+  background: rgba(0, 0, 0, 0.25);
+  font: 12px var(--mono, ui-monospace, monospace);
+  color: var(--ui-text);
+}
+
+.ui-root .ui-color__area:focus-visible,
+.ui-root .ui-color__hue:focus-visible,
+.ui-root .ui-color__hex:focus-visible,
+.ui-root .ui-char__more:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+
+/* Fork Ordahi: tela de Personagens. */
+.ui-dialog.ui-people {
+  width: min(1020px, calc(100vw - 32px));
+  max-width: none;
+  height: min(760px, calc(100vh - 32px));
+  max-height: none;
+}
+
+.ui-dialog.ui-people[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui-people__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+
+.ui-people__side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  border-right: 1px solid var(--ui-line);
+}
+
+.ui-people__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ui-people__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  color: var(--ui-text);
+}
+
+.ui-people__row:hover {
+  background: var(--ui-bg-hover);
+}
+
+.ui-people__row[aria-current='true'] {
+  background: var(--ui-accent-soft);
+}
+
+.ui-people__rowtext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.ui-people__rowtext strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.ui-people__rowtext > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ui-people__here {
+  color: var(--ui-accent);
+}
+
+.ui-people__blank {
+  align-self: center;
+  justify-self: center;
+  padding: 24px;
+  font-size: 13px;
+  color: var(--ui-muted);
+}
+
+.ui-people__editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ui-people__hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 16px;
+  padding: 14px 16px 12px;
+}
+
+.ui-people__who {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ui-people__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ui-people__who .ui-set__hint {
+  margin: -6px 0 0;
+}
+
+.ui-people__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ui-people__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.ui-people__tab {
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 13px;
+  color: var(--ui-muted);
+}
+
+.ui-people__tab:hover {
+  color: var(--ui-text);
+}
+
+.ui-people__tab[aria-selected='true'] {
+  border-bottom-color: var(--ui-accent);
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+.ui-people__panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.ui-people__panel .ui-char__groups {
+  margin-top: 0;
+}
+
+.ui-people__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ui-people__stack .ui-char__row {
+  grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.ui-people__foot {
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--ui-line);
+}
+
+.ui-people__foot .ui-char__error {
+  margin: 0 0 8px;
+}
+
+.ui-people__foot .ui-char__actions {
+  margin-top: 0;
+}
+
+.ui-people__guard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--ui-text);
+}
+
+.ui-people__guard > span {
+  margin-right: auto;
+}
+
+@media (max-width: 720px) {
+  .ui-people__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 150px minmax(0, 1fr);
+  }
+
+  .ui-people__side {
+    border-right: 0;
+    border-bottom: 1px solid var(--ui-line);
+  }
+}
