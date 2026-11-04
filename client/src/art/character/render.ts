@@ -747,45 +747,80 @@ function drawAccessory(dc: Dc): void {
   const it = p.item;
   const v = r.view;
   switch (a.accessory) {
-    case 'glasses': {
-      // Duas lentes emolduradas (o olho continua visível dentro) + ponte e hastes.
-      const fr = shade(it.dk, -0.08);
-      const lens = 'rgba(225,240,255,0.6)';
+    case 'glasses':
+    case 'round_glasses': {
+      // Fork Ordahi: armação em volta do olho (colunas 2–6 e 7–11, linhas 9–12), com o olho inteiro à mostra dentro da
+      // lente. A antiga passava por cima da linha de cima do olho e virava uma barra na testa. Redondo = sem os cantos.
+      const fr = it.base;
+      // A borda de baixo é mais fina que a de cima (mistura com a pele), senão armação escura vira máscara: o olho é
+      // preto e fica colado nela. Lente clara para o olho se destacar.
+      const under = mix(it.base, p.skin.base, 0.45);
+      const round = a.accessory === 'round_glasses';
+      const lens = 'rgba(238,246,255,0.72)';
+      const glint = '#ffffff';
       if (v === 'down') {
-        for (const x0 of [3, 8]) {
-          put(x0, 10, fr);
-          put(x0 + 1, 10, fr);
-          put(x0 + 2, 10, fr);
-          put(x0, 11, fr);
-          put(x0 + 2, 11, lens);
+        for (const x0 of [2, 7]) {
+          for (let cx = x0 + (round ? 1 : 0); cx <= x0 + (round ? 3 : 4); cx++) put(cx, 9, fr);
+          for (let cx = x0 + 1; cx <= x0 + 3; cx++) put(cx, 12, under);
+          for (const cy of [10, 11]) {
+            put(x0, cy, fr);
+            put(x0 + 4, cy, fr);
+            put(x0 + 1, cy, lens);
+            put(x0 + 3, cy, lens);
+          }
+          put(x0 + 1, 10, glint);
         }
-        for (const cx of [1, 2, 6, 7, 11, 12]) put(cx, 10, it.base);
+        put(1, 10, it.base);
+        put(12, 10, it.base);
       } else if (v === 'side') {
-        put(2, 10, fr);
-        put(3, 10, fr);
-        put(4, 10, fr);
-        put(2, 11, fr);
-        put(4, 11, fr);
-        for (let cx = 5; cx <= 8; cx++) put(cx, 10, it.base);
+        for (let cx = round ? 2 : 1; cx <= (round ? 4 : 5); cx++) put(cx, 9, fr);
+        for (let cx = 2; cx <= 4; cx++) put(cx, 12, under);
+        for (const cy of [10, 11]) {
+          put(1, cy, fr);
+          put(5, cy, fr);
+          put(2, cy, lens);
+          put(4, cy, lens);
+        }
+        put(2, 10, glint);
+        for (let cx = 6; cx <= 8; cx++) put(cx, 10, it.base);
       } else {
-        put(0, 10, it.dk);
-        put(13, 10, it.dk);
+        put(0, 10, fr);
+        put(13, 10, fr);
+        put(1, 10, it.base);
+        put(12, 10, it.base);
       }
       break;
     }
     case 'sunglasses': {
+      // Lentes cheias no mesmo desenho dos óculos de grau, com o reflexo no alto de cada uma.
+      const dark = '#15161c';
+      const shine = '#5a6b8a';
       if (v === 'down') {
-        for (let cx = 2; cx <= 11; cx++) put(cx, 10, '#15161c');
-        for (const cx of [2, 3, 4, 5, 8, 9, 10, 11]) put(cx, 11, cx === 3 || cx === 9 ? '#5a6b8a' : '#15161c');
-        put(0, 10, '#15161c');
-        put(13, 10, '#15161c');
+        for (const x0 of [2, 7]) {
+          for (let cx = x0; cx <= x0 + 4; cx++) {
+            put(cx, 9, dark);
+            put(cx, 10, dark);
+            put(cx, 11, dark);
+          }
+          for (let cx = x0 + 1; cx <= x0 + 3; cx++) put(cx, 12, dark);
+          put(x0 + 1, 10, shine);
+          put(x0 + 2, 10, shine);
+        }
+        put(1, 10, dark);
+        put(12, 10, dark);
       } else if (v === 'side') {
-        for (let cx = 1; cx <= 4; cx++) put(cx, 10, '#15161c');
-        for (let cx = 1; cx <= 3; cx++) put(cx, 11, cx === 2 ? '#5a6b8a' : '#15161c');
-        for (let cx = 5; cx <= 8; cx++) put(cx, 10, '#15161c');
+        for (let cx = 1; cx <= 5; cx++) {
+          put(cx, 9, dark);
+          put(cx, 10, dark);
+          put(cx, 11, dark);
+        }
+        for (let cx = 2; cx <= 4; cx++) put(cx, 12, dark);
+        put(2, 10, shine);
+        put(3, 10, shine);
+        for (let cx = 6; cx <= 8; cx++) put(cx, 10, dark);
       } else {
-        put(0, 10, '#15161c');
-        put(13, 10, '#15161c');
+        put(0, 10, dark);
+        put(13, 10, dark);
       }
       break;
     }
