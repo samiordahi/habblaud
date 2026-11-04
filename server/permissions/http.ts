@@ -8,7 +8,7 @@
 //   POST /api/permissions/:id/decision    (página)  {behavior: allow | deny | terminal | answer, message?, answers?, ...}
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HttpError, readJson, sendJson } from '../http/app';
-import { InvalidRequest, parseDecision, WAIT_MAX_MS, type PermissionRegistry } from './registry';
+import { InvalidRequest, parseDecision, WAIT_MAX_MS, type DecideResult, type PermissionRegistry } from './registry';
 import { tr } from '../../shared/i18n';
 
 const ITEM = /^\/api\/permissions\/([^/]+)(?:\/(wait|decision))?$/;
@@ -61,7 +61,16 @@ export function createPermissionRoutes(registry: PermissionRegistry): (req: Inco
     if (!d) {
       throw new HttpError(400, 'esperado {behavior: "allow" | "deny" | "terminal", message?, interrupt?, suggestion?} ou {behavior: "answer", answers: [{question, options?, other?}]}');
     }
-    switch (registry.decide(id, d)) {
+    // Fork Ordahi: pedido externo vai à origem, que pode falhar; a falha volta para a página como erro.
+    let outcome: DecideResult;
+    if (registry.isExternal(id)) {
+      const r = await registry.decideExternal(id, d);
+      if (r.error) return sendJson(res, 502, { error: tr('Não foi possível gravar a decisão: {0}', [r.error]) });
+      outcome = r.result;
+    } else {
+      outcome = registry.decide(id, d);
+    }
+    switch (outcome) {
       case 'ok':
         return sendJson(res, 200, { ok: true });
       case 'not-found':

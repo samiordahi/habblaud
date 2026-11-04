@@ -60,9 +60,30 @@ HABBLAUD_EXTERNAL_URL=http://127.0.0.1:4360/api/agentes-remotos
 - `estado`: `active` trabalha, `waiting` pede você, `idle` descansa, `error` descansa com a atividade marcada como erro.
 - Quem some do retrato sai pelo elevador; se a ponte cai por 20 consultas seguidas (~1 min), todos os externos saem e
   voltam quando ela volta.
-- Prompt, argumento e saída não fazem parte do contrato. Terminal, aprovação e mensagens não existem para externos.
+- Prompt, argumento e saída não fazem parte do contrato. Terminal e mensagens não existem para externos.
 
 Código em `server/sources/external.ts`, testes em `server/sources/external.test.ts`.
+
+### Aprovar pedidos do AIOS pela sala
+
+A ponte traz também os arquivos de `requests/` em `estado: esperando`, e onde mandar a decisão:
+
+```json
+{ "pedidos": [ { "id": "requests/x.md", "agente": "bella", "titulo": "Enviar cobrança", "texto": "O texto na íntegra",
+                 "tipo": "enviar", "origem": "hermes", "skill": null, "efeitoExterno": true, "quando": "..." } ],
+  "decisao": "/api/pedido" }
+```
+
+- O arquivo é a verdade. A sala é um espelho: o pedido vira cartão **Pede sua aprovação** no agente de `agente`, o
+  mesmo cartão das permissões (`PermissionRequestInfo.external`), e o texto só sai pelo detalhe, como os argumentos.
+- A decisão vai por POST `{arquivo, decisao}` em `decisao`, sempre na origem da ponte. O cartão só some quando a origem
+  confirma; se ela falhar, o pedido continua aberto e o motivo aparece na página. Sem `decisao`, ninguém decide.
+- Pedido não expira, não precisa de página aberta para esperar e não tem "Responder no terminal". Decidido no painel,
+  some da sala na consulta seguinte. Só existe aprovar ou recusar; a recusa não leva motivo, porque o arquivo só guarda
+  a decisão.
+- Com a página aberta, pedido novo dá aviso. Pedido que já esperava aparece no contador "precisam de você" e na tecla `P`.
+
+Código em `server/sources/external.ts` e `syncExternal`/`decideExternal` em `server/permissions/registry.ts`.
 
 No Windows, a letra do drive não diferencia caixa na sala (`server/model/rooms.ts`): o VS Code manda `d:`, o Node `D:`.
 
@@ -79,6 +100,17 @@ HABBLAUD_FRAME_ANCESTORS="http://127.0.0.1:4360 http://localhost:4360"
 Com a lista, sai `Content-Security-Policy: frame-ancestors 'self' <origens>` no lugar do DENY; sem ela, tudo como no
 original. O painel liga o Habblaud já com isso (`scripts/painel-habblaud.mjs` no AIOS). Código em
 `server/http/static.ts`, testes em `server/http/frame.test.ts`.
+
+## O que está ligado: `~/.habblaud/ambiente.env`
+
+Terminal interativo, ditado, World e o desenho do celular moram num arquivo só, `CHAVE=valor`, lido pelas duas partidas
+(`iniciar.ps1` e `scripts/painel-habblaud.mjs` no AIOS), para a sala subir igual por qualquer uma. Sem o arquivo, tudo
+fica no padrão fechado: é o caso do cliente do Northbase. O login do celular fica no `.env` deste repositório, que o
+`npm run remote:setup` escreve e o Git ignora.
+
+No Windows, o celular entra pela porta 4748 presa ao `127.0.0.1` e publicada por `tailscale serve`: não há anúncio mDNS
+aqui, e assim a porta nunca aparece na rede local. Ditado: `whisper-cli.exe` do release oficial do whisper.cpp em
+`~/.habblaud/ferramentas/whisper`, ffmpeg pelo winget e `ggml-small.bin` em `~/.local/share/whisper`.
 
 ## Atualizar a partir do original
 

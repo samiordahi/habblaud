@@ -4,6 +4,7 @@ import { setQuiet } from '../log';
 import { matchExternal, parseIdentities } from '../model/identities';
 import { NameStore } from '../model/names';
 import { Office, OFFLINE_GRACE_MS } from '../model/office';
+import { PermissionRegistry } from '../permissions/registry';
 import { ExternalSource, parseExternalFeed } from './external';
 
 setQuiet(true);
@@ -125,5 +126,110 @@ describe('mesma pasta, mesma sala', () => {
     serve(FEED);
     await source.poll();
     expect(office.get('ext:tars')!.roomId).toBe(office.get('acc:1')!.roomId);
+  });
+});
+
+describe('pedidos de requests/ pela ponte', () => {
+  const pedido = { id: 'requests/a.md', agente: 'tars', titulo: 'Enviar cobrança', texto: 'Texto na íntegra', tipo: 'enviar', origem: 'hermes', efeitoExterno: true, quando: '2026-11-04T10:00:00Z' };
+  const agente = { id: 'tars', nome: 'Tars', estado: 'idle' };
+
+  function ponte(decidir: (corpo: { arquivo: string; decisao: string }) => Response) {
+    let clock = 1_000_000;
+    const office: Office = new Office({ names: new NameStore(null), version: 't', startedAt: clock, accounts: () => [], sources: () => [], accountName: () => undefined, now: () => clock, permissions: () => registry.snapshot() });
+    const registry = new PermissionRegistry({ office, viewers: () => 0, now: () => clock });
+    const chamadas: string[] = [];
+    let body: unknown = { projeto: 'D:/x', agentes: [agente], pedidos: [pedido], decisao: '/api/pedido' };
+    const source = new ExternalSource({
+      url: 'http://127.0.0.1:4360/api/agentes-remotos',
+      office,
+      identity: (key) => matchExternal(IDS, key),
+      requests: registry,
+      now: () => clock,
+      fetchImpl: (async (url: string | URL, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          chamadas.push(String(url));
+          return decidir(JSON.parse(String(init.body)));
+        }
+        return new Response(JSON.stringify(body), { status: 200 });
+      }) as typeof fetch,
+    });
+    return {
+      office, registry, chamadas, poll: () => source.poll(),
+      setBody: (b: unknown) => { body = b; },
+      tick: (ms: number) => { clock += ms; registry.tick(); },
+      cartao: () => registry.snapshot().get('ext:tars'),
+    };
+  }
+
+  it('vira cartão do agente, sem prazo, com o texto só no detalhe', async () => {
+    const t = ponte(() => new Response('{}'));
+    await t.poll();
+    const c = t.cartao()!;
+    expect(c).toMatchObject({ external: true, title: 'Enviar cobrança', icon: '📤' });
+    expect(c.input).toBeUndefined();
+    expect(t.registry.detail(c.id)?.input).toBe('Texto na íntegra');
+    expect(t.office.commit().snapshot.agents.find((a) => a.id === 'ext:tars')?.status).toBe('waiting');
+    t.tick(30 * 24 * 3_600_000);
+    expect(t.cartao()).toBeDefined();
+  });
+
+  it('aprovar grava na origem e o cartão não volta com o retrato atrasado', async () => {
+    let corpo: unknown;
+    const t = ponte((b) => { corpo = b; return new Response('{"ok":true}'); });
+    await t.poll();
+    expect(await t.registry.decideExternal(t.cartao()!.id, { behavior: 'allow' })).toEqual({ result: 'ok' });
+    expect(corpo).toEqual({ arquivo: 'requests/a.md', decisao: 'aprovado' });
+    expect(t.chamadas).toEqual(['http://127.0.0.1:4360/api/pedido']);
+    expect(t.cartao()).toBeUndefined();
+    await t.poll();
+    expect(t.cartao()).toBeUndefined();
+  });
+
+  it('recusar grava recusado', async () => {
+    let corpo: { decisao?: string } = {};
+    const t = ponte((b) => { corpo = b; return new Response('{"ok":true}'); });
+    await t.poll();
+    await t.registry.decideExternal(t.cartao()!.id, { behavior: 'deny' });
+    expect(corpo.decisao).toBe('recusado');
+  });
+
+  it('origem recusou: o pedido continua aberto e o motivo volta', async () => {
+    const t = ponte(() => new Response('{"ok":false,"porque":"este pedido já foi decidido"}', { status: 400 }));
+    await t.poll();
+    const r = await t.registry.decideExternal(t.cartao()!.id, { behavior: 'allow' });
+    expect(r.error).toBe('este pedido já foi decidido');
+    expect(t.cartao()).toBeDefined();
+  });
+
+  it('sem `decisao` na ponte, ninguém decide', async () => {
+    const t = ponte(() => new Response('{}'));
+    t.setBody({ projeto: 'D:/x', agentes: [agente], pedidos: [pedido] });
+    await t.poll();
+    expect((await t.registry.decideExternal(t.cartao()!.id, { behavior: 'allow' })).error).toBeTruthy();
+    expect(t.chamadas).toEqual([]);
+  });
+
+  it('decidido no painel: some do cartão', async () => {
+    const t = ponte(() => new Response('{}'));
+    await t.poll();
+    t.setBody({ projeto: 'D:/x', agentes: [agente], pedidos: [], decisao: '/api/pedido' });
+    await t.poll();
+    expect(t.cartao()).toBeUndefined();
+  });
+
+  it('só aprovar ou recusar: terminal, interromper e sugestão não valem', async () => {
+    const t = ponte(() => new Response('{}'));
+    await t.poll();
+    const id = t.cartao()!.id;
+    for (const d of [{ behavior: 'terminal' }, { behavior: 'deny', interrupt: true }, { behavior: 'allow', suggestion: 0 }] as const) {
+      expect((await t.registry.decideExternal(id, d)).result).toBe('unsupported');
+    }
+    expect(t.chamadas).toEqual([]);
+  });
+
+  it('`decisao` que aponta para fora da origem é ignorada', () => {
+    expect(parseExternalFeed({ projeto: 'x', agentes: [], decisao: '//evil.test/x' })?.decisao).toBeUndefined();
+    expect(parseExternalFeed({ projeto: 'x', agentes: [], decisao: 'http://evil.test/x' })?.decisao).toBeUndefined();
+    expect(parseExternalFeed({ projeto: 'x', agentes: [] })?.pedidos).toEqual([]);
   });
 });

@@ -18,6 +18,7 @@
 import { randomBytes } from 'node:crypto';
 import { describeTool, maskSecrets, truncate } from '../../shared/activity';
 import { ANSWER_OTHER_MAX, answerSummary, ASK_TOOL, checkAnswers } from '../../shared/answers';
+import { hash32 } from '../../shared/hash';
 import type { Activity, AgentInfo, PermissionAnswer, PermissionDecision, PermissionRequestInfo, PermissionSuggestionInfo } from '../../shared/types';
 import { errMsg, log } from '../log';
 import { toolView } from '../sources/terminal';
@@ -112,6 +113,24 @@ export type WaitResult =
  */
 export type DecideResult = 'ok' | 'not-found' | 'conflict' | 'invalid' | 'invalid-answer' | 'unsupported';
 
+/** Fork Ordahi: pedido de fora do Claude Code (`requests/` do AIOS), trazido pela ponte. */
+export interface ExternalPermission {
+  /** Identidade do pedido na origem (o caminho do arquivo). */
+  key: string;
+  agentId: string;
+  title: string;
+  text: string;
+  icon: string;
+  input: string;
+  createdAt: number;
+}
+
+/** Fork Ordahi: leva a decisão à origem. Devolve o motivo da falha, ou undefined quando deu certo. */
+export type ExternalDecide = (key: string, behavior: 'allow' | 'deny') => Promise<string | undefined>;
+
+/** Fork Ordahi: um pedido externo não tem prazo; a data só preenche o contrato do cartão. */
+const EXTERNAL_TTL_MS = 365 * 24 * 3_600_000;
+
 /** Erro de validação do corpo vindo do hook (vira 400). */
 export class InvalidRequest extends Error {}
 
@@ -130,6 +149,10 @@ interface AskFormat {
 interface Pending {
   /** Versão completa (com `input`): GET /api/permissions/:id. */
   info: PermissionRequestInfo;
+  /** Fork Ordahi: chave do pedido na origem; sem hook esperando, quem decide é ExternalDecide. */
+  external?: string;
+  /** Fork Ordahi: decisão a caminho da origem (segura o segundo clique). */
+  deciding?: boolean;
   /** Pedido do Codex (sem a busca da resposta no transcript). */
   codex?: boolean;
   /** Pergunta (AskUserQuestion): o formato de `tool_input.questions`, por posição (undefined = entrada inválida). */
@@ -254,7 +277,7 @@ export function applyPermission(a: AgentInfo, p: PermissionRequestInfo | undefin
     a.status = 'waiting';
     a.statusSince = p.createdAt;
   }
-  a.waitingFor ??= isQuestion(p) ? tr('responder uma pergunta') : p.provider === 'codex' ? tr('aprovar um comando') : tr('aprovar uma permissão');
+  a.waitingFor ??= p.external ? tr('aprovar um pedido') : isQuestion(p) ? tr('responder uma pergunta') : p.provider === 'codex' ? tr('aprovar um comando') : tr('aprovar uma permissão');
   return a;
 }
 
@@ -346,6 +369,9 @@ export class PermissionRegistry {
   private pending = new Map<string, Pending>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private seq = 0;
+  /** Fork Ordahi: quem leva a decisão à origem, e o que acabou de ser decidido e ainda aparece no retrato. */
+  private externalDecide: ExternalDecide | undefined;
+  private readonly settledExternal = new Set<string>();
   private readonly now: () => number;
   private readonly orphanMs: number;
   private readonly resolvedKeepMs: number;
@@ -382,7 +408,7 @@ export class PermissionRegistry {
   /** Pedidos em aberto (sem decisão). */
   get size(): number {
     let n = 0;
-    for (const p of this.pending.values()) if (!p.outcome) n++;
+    for (const p of this.pending.values()) if (!p.outcome && p.external === undefined) n++;
     return n;
   }
 
@@ -445,6 +471,75 @@ export class PermissionRegistry {
     }
     this.opts.office.markDirty();
     return { id, expiresAt: info.expiresAt + EXPIRY_GRACE_MS };
+  }
+
+  /**
+   * Fork Ordahi: acerta os pedidos externos com o retrato da ponte. Pedido novo aparece e avisa; pedido que sumiu
+   * (decidido no painel, ou a ponte caiu) sai do cartão. O arquivo de origem é a verdade: aqui só há um espelho.
+   */
+  syncExternal(list: readonly ExternalPermission[], decide?: ExternalDecide): void {
+    this.externalDecide = decide;
+    const keys = new Set(list.map((x) => x.key));
+    let changed = false;
+    for (const key of this.settledExternal) if (!keys.has(key)) this.settledExternal.delete(key);
+    for (const [id, p] of this.pending) {
+      if (p.external !== undefined && !keys.has(p.external)) {
+        this.pending.delete(id);
+        changed = true;
+      }
+    }
+    const open = new Set<string>();
+    for (const p of this.pending.values()) if (p.external !== undefined) open.add(p.external);
+    for (const x of list) {
+      // Decidido há pouco e o retrato ainda não viu: não reabre o cartão.
+      if (open.has(x.key) || this.settledExternal.has(x.key) || !present(this.opts.office.get(x.agentId))) continue;
+      const now = this.now();
+      const id = `ext-${hash32(x.key).toString(36)}`;
+      const info: PermissionRequestInfo = {
+        id, tool: 'Pedido', title: x.title, text: x.text, icon: x.icon, input: x.input, inputKind: 'text',
+        external: true, createdAt: x.createdAt, expiresAt: now + EXTERNAL_TTL_MS,
+      };
+      this.pending.set(id, { info, external: x.key, agentId: x.agentId, sessionId: x.agentId, signature: '', lastScanAt: 0, waiters: new Set(), idleSince: now });
+      this.opts.office.noticePermission(x.agentId, x.title);
+      changed = true;
+    }
+    if (changed) this.opts.office.markDirty();
+  }
+
+  /** Fork Ordahi: este id é de um pedido externo? */
+  isExternal(id: string): boolean {
+    return this.pending.get(id)?.external !== undefined;
+  }
+
+  /**
+   * Fork Ordahi: decisão de um pedido externo. Só vale aprovar ou recusar, e o pedido só some do cartão depois que a
+   * origem confirmou: se ela falhar, o pedido continua aberto e o motivo vai para a página.
+   */
+  async decideExternal(id: string, d: PermissionDecision): Promise<{ result: DecideResult; error?: string }> {
+    const p = this.pending.get(id);
+    if (p?.external === undefined) return { result: 'not-found' };
+    if (p.deciding) return { result: 'conflict' };
+    if ((d.behavior !== 'allow' && d.behavior !== 'deny') || d.suggestion !== undefined || d.interrupt) return { result: 'unsupported' };
+    if (!this.externalDecide) return { result: 'ok', error: tr('a ponte com o painel não aceita decisões agora') };
+    p.deciding = true;
+    let error: string | undefined;
+    try {
+      error = await this.externalDecide(p.external, d.behavior);
+    } catch {
+      error = tr('o painel não respondeu');
+    }
+    delete p.deciding;
+    if (error) return { result: 'ok', error };
+    this.settledExternal.add(p.external);
+    this.pending.delete(id);
+    const allow = d.behavior === 'allow';
+    this.opts.office.addActivity(
+      p.agentId,
+      { id: `${p.agentId}#perm-${allow ? 'ok' : 'no'}:${id}`, at: this.now(), kind: allow ? 'other' : 'wait', icon: allow ? '✅' : '🚫', text: allow ? tr('Aprovado no Habblaud') : tr('Recusado no Habblaud'), detail: p.info.title },
+      false,
+    );
+    this.opts.office.markDirty();
+    return { result: 'ok' };
   }
 
   /** Detalhe completo de um pedido em aberto (com os argumentos), ou undefined. */
@@ -554,6 +649,8 @@ export class PermissionRegistry {
         if (now - (p.resolvedAt ?? now) >= this.resolvedKeepMs) this.pending.delete(id);
         continue;
       }
+      // Fork Ordahi: pedido externo espera o tempo que for; quem o tira é syncExternal.
+      if (p.external !== undefined) continue;
       if (now >= p.info.expiresAt + EXPIRY_GRACE_MS) this.release(p, 'expired');
       else if (!p.waiters.size && now - p.idleSince >= this.orphanMs) this.release(p, 'orphan');
       else if (!present(this.opts.office.get(p.agentId))) this.release(p, 'gone');

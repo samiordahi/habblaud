@@ -44,6 +44,9 @@ export function expiryText(expiresAt: number, now: number, seconds = false): str
   return tr('volta ao terminal em {0}', [formatDuration(left)]);
 }
 
+/** Fork Ordahi: aviso do cartão de um pedido de `requests/`. */
+export const EXTERNAL_PERMISSION_NOTE = tr('Nada acontece enquanto você não decidir. A decisão fica gravada no pedido, e o painel mostra o mesmo pedido.');
+
 /** Aviso do cartão de um pedido do Codex. */
 export const CODEX_PERMISSION_NOTE = tr('No Codex, a aprovação só aparece no terminal depois que você responder aqui ou o prazo acabar.');
 
@@ -59,9 +62,12 @@ export interface PermissionOptions {
   seconds: boolean;
   /** Aviso curto embaixo da prévia ('' = nenhum). */
   note: string;
+  /** Fork Ordahi: a recusa não leva motivo (o arquivo do pedido só guarda a decisão). */
+  noReason?: boolean;
 }
 
-export function permissionOptions(p: Pick<PermissionRequestInfo, 'provider' | 'suggestions'>, agent: Pick<AgentInfo, 'kind' | 'background'>): PermissionOptions {
+export function permissionOptions(p: Pick<PermissionRequestInfo, 'provider' | 'suggestions' | 'external'>, agent: Pick<AgentInfo, 'kind' | 'background'>): PermissionOptions {
+  if (p.external) return { always: false, interrupt: false, reasonRequired: false, seconds: false, noReason: true, note: EXTERNAL_PERMISSION_NOTE };
   if (p.provider === 'codex') return { always: false, interrupt: false, reasonRequired: true, seconds: true, note: CODEX_PERMISSION_NOTE };
   // Subagente em segundo plano: o Claude Code só mostra o diálogo depois que o hook responde.
   const blocking = agent.kind === 'sub' && !!agent.background;
@@ -335,9 +341,13 @@ export class PermissionCard {
       this.icon.innerHTML = ask ? ICONS.help : ICONS.lock;
       setAttr(this.el, 'aria-label', ask ? tr('Pergunta do agente') : tr('Pedido de permissão'));
     }
-    setText(this.title, ask ? (p.questions!.length > 1 ? tr('Perguntas para você') : tr('Pergunta para você')) : tr('Pede permissão'));
+    setText(this.title, ask ? (p.questions!.length > 1 ? tr('Perguntas para você') : tr('Pergunta para você')) : p.external ? tr('Pede sua aprovação') : tr('Pede permissão'));
     const by = p.subagent ? tr(' · subagente {0}', [p.subagent]) : '';
     setText(this.what, ask ? tr('Aqui ou no terminal: vale a primeira resposta{0}', [by]) :`${p.icon} ${p.text}${by}`);
+    // Fork Ordahi: pedido externo não tem prazo nem terminal para onde voltar.
+    setHidden(this.timer, !!p.external);
+    setHidden(this.terminalBtn, !!p.external);
+    setHidden(this.reason, !!opts.noReason);
     setText(this.timer, expiryText(p.expiresAt, now, opts.seconds));
     setTitle(
       this.timer,
@@ -465,7 +475,9 @@ export class PermissionCard {
     try {
       error = await this.ctx.store.decidePermission(id, d);
     } catch {
-      error = tr('Não foi possível falar com o Habblaud. Responda no terminal.');
+      error = this.ctx.agent(this.agentId)?.permission?.external
+        ? tr('Não foi possível falar com o Habblaud. O pedido continua esperando.')
+        : tr('Não foi possível falar com o Habblaud. Responda no terminal.');
     }
     if (this.id !== id) return;
     if (error) {

@@ -657,6 +657,8 @@ export interface PermissionRequestInfo {
   questions?: AskQuestion[];
   /** Outros pedidos do mesmo agente esperando depois deste. */
   queued?: number;
+  /** Fork Ordahi: pedido de `requests/` que veio pela ponte do AIOS. Não expira nem volta a terminal nenhum. */
+  external?: boolean;
   createdAt: number;
   /** Quando o hook desiste de esperar e o pedido passa a valer só no terminal. */
   expiresAt: number;

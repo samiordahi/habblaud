@@ -254,6 +254,8 @@ const permissions = config.terminal
     })
   : undefined;
 late.permissions = permissions;
+// Fork Ordahi: os pedidos de `requests/` que vêm pela ponte viram cartão neste mesmo registro.
+if (permissions) external?.attachRequests(permissions);
 // Mensagens pelo escritório (plugin habblaud-mensagens): entram na sessão como se você as tivesse digitado, então
 // seguem a mesma trava (e HABBLAUD_MENSAGENS=0 desliga só elas). Ao Codex vão por `codex queue` (messages/codex.ts):
 // fora do Docker o próprio servidor roda o comando (HABBLAUD_CODEX_BIN ou `codex` do PATH); no Docker, o auxiliar do

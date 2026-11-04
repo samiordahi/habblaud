@@ -10,6 +10,11 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **Fork Ordahi: aprovar pedidos do AIOS pela sala.** Os arquivos de `requests/` em `estado: esperando` viram o cartão
+  **Pede sua aprovação** no agente do perfil, com o texto na íntegra, sem prazo, e a decisão volta ao arquivo.
+
 ## [1.0.3] - 2026-10-16
 
 ### Corrigido
