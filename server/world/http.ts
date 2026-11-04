@@ -22,7 +22,7 @@
 // cross-site/same-site), como a guarda já faz com os POST. A exportação dos dados também é um GET com efeito (gasta a
 // cota do dia no servidor do mundo) e devolve dados pessoais: a mesma regra. Excluir a conta pede o código do e-mail.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { parseAppearanceParts } from '../../shared/appearance';
+import { parseWorldParts } from '../../shared/world/appearance-flat';
 import { tr } from '../../shared/i18n';
 import { isWorldThemeChoice } from '../../shared/world/api';
 import { isIntroId } from '../../shared/world/intro';
@@ -121,7 +121,7 @@ function playerName(v: unknown): string {
 /** O personagem; `name` ausente = criar com o nome reservado no cadastro ou, ao atualizar, manter o nome (o serviço decide). */
 function character(body: Record<string, unknown>): PlayerInput {
   const name = body.name === undefined ? undefined : playerName(body.name);
-  const parts = parseAppearanceParts(body.parts ?? {});
+  const parts = parseWorldParts(body.parts ?? {});
   const traits = parsePlayerTraits(body.traits);
   if ((body.look !== 'f' && body.look !== 'm') || !parts || !traits || !isIntroId(body.intro)) {
     throw new BodyError(422, 'invalid', tr('esperado {name?, look: "f" ou "m", parts, traits: 2 ou 3 traços que combinam, intro}'));

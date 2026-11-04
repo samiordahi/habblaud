@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { PART_KEYS, parseAppearanceParts } from '../appearance';
 import { hash32 } from '../hash';
-import { appearanceFromSeed, flattenAppearance, type SeedAppearance } from './appearance-flat';
+import { ACC_COLORS, JACKET_COLORS, SKINS, appearanceFromSeed, flattenAppearance, type SeedAppearance } from './appearance-flat';
 
 const SIG_KEYS = [
   'skin', 'hair', 'hairStyle', 'eyes', 'top', 'topAccent', 'topStyle', 'bottom', 'bottomStyle', 'shoes', 'accessory',
@@ -69,6 +69,25 @@ describe('flattenAppearance', () => {
     expect(edited.skin).toBe(a.skin);
     // Um undefined explícito não apaga a peça sorteada.
     expect(flattenAppearance(seed, { skin: undefined }, 'm').skin).toBe(a.skin);
+  });
+
+  it('fork Ordahi: peça do escritório e cor livre nunca sobem; viram a do mundo mais parecida', () => {
+    const flat = flattenAppearance(7, { hairStyle: 'braids', topStyle: 'blazer', bottomStyle: 'long_skirt', accessory: 'hoops', top: '#e78130', skin: '#f2c9b4' }, 'f');
+    expect(flat).toMatchObject({ hairStyle: 'pigtails', topStyle: 'jacket', bottomStyle: 'skirt', accessory: 'earrings' });
+    expect(ACC_COLORS.earrings).toContain(flat.accessoryColor);
+    expect(JACKET_COLORS).toContain(flat.top);
+    expect(SKINS).toContain(flat.skin);
+  });
+
+  it('fork Ordahi: sem peça própria nem cor livre, a tradução não muda nada', () => {
+    for (let i = 0; i < 400; i++) {
+      for (const look of ['f', 'm'] as const) {
+        const seed = hash32(`a_${i}`);
+        const a = appearanceFromSeed(seed, { look });
+        const flat = flattenAppearance(seed, undefined, look);
+        for (const k of PART_KEYS) expect(flat[k], `${seed} ${k}`).toBe(a[k]);
+      }
+    }
   });
 
   it('look feminino nunca leva barba', () => {

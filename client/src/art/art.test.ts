@@ -1,7 +1,7 @@
 // Testes das partes puras do módulo de arte (sem DOM): aparência, templates, personagens, móveis,
 // pisos, paredes, ícones, temas e os desenhos por quadro (com um contexto falso).
 import { describe, expect, it } from 'vitest';
-import { ACCESSORIES, BOTTOM_STYLES, FACIAL_HAIR, HAIR_STYLES, PART_KEYS, TOP_STYLES } from '../../../shared/appearance';
+import { ACCESSORIES, BOTTOM_STYLES, FACIAL_HAIR, HAIR_STYLES, OFFICE_ACCESSORIES, OFFICE_BOTTOM_STYLES, OFFICE_HAIR_STYLES, OFFICE_TOP_STYLES, PART_KEYS, TOP_STYLES } from '../../../shared/appearance';
 import { FURNITURE, TILE, type Accessory, type Appearance, type Dir, type FloorKind, type FurnitureKind, type HairStyle, type HeldItem, type Pose, type ScreenMode, type TopStyle, type WallPattern } from './api';
 import { appearanceFromSeed, appearanceKey, editorConflict, editorOptions, fitToOptions } from './character/appearance';
 import { HAIR, HEAD_BASE } from './character/hair';
@@ -858,11 +858,11 @@ describe('desenhos por quadro', () => {
 // Deriva entre shared/appearance (o que o servidor aceita) e as uniões da arte: quebra no typecheck.
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const STYLE_LISTS_MATCH: [
-  Same<(typeof HAIR_STYLES)[number], HairStyle>,
-  Same<(typeof TOP_STYLES)[number], TopStyle>,
-  Same<(typeof ACCESSORIES)[number], Accessory>,
+  Same<(typeof HAIR_STYLES)[number] | (typeof OFFICE_HAIR_STYLES)[number], HairStyle>,
+  Same<(typeof TOP_STYLES)[number] | (typeof OFFICE_TOP_STYLES)[number], TopStyle>,
+  Same<(typeof ACCESSORIES)[number] | (typeof OFFICE_ACCESSORIES)[number], Accessory>,
   Same<(typeof FACIAL_HAIR)[number], NonNullable<Appearance['facialHair']>>,
-  Same<(typeof BOTTOM_STYLES)[number], NonNullable<Appearance['bottomStyle']>>,
+  Same<(typeof BOTTOM_STYLES)[number] | (typeof OFFICE_BOTTOM_STYLES)[number], NonNullable<Appearance['bottomStyle']>>,
 ] = [true, true, true, true, true];
 
 describe('editor do personagem (arte)', () => {

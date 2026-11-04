@@ -22,7 +22,7 @@
 //   exportação dos dados da conta (GET /v1/me/export): o JSON vai como veio (é o arquivo que a pessoa baixa).
 // - Fase 6: excluir a conta (POST /v1/me/delete e /v1/me/delete/confirm) e exportar os dados; a manutenção do mundo
 //   chega como 503 `maintenance`, com o código passado adiante como os outros.
-import { parseAppearanceParts } from '../../shared/appearance';
+import { parseWorldParts } from '../../shared/world/appearance-flat';
 import { isIntroId } from '../../shared/world/intro';
 import {
   VISIBILITY_DEFAULTS,
@@ -134,7 +134,7 @@ export function parsePlayer(raw: unknown): Player | undefined {
   const p: Player = {
     name,
     look: v.look,
-    parts: parseAppearanceParts(v.parts) ?? {},
+    parts: parseWorldParts(v.parts) ?? {},
     traits: Array.isArray(v.traits) ? v.traits.filter(isTraitId).slice(0, 3) : [],
     intro: isIntroId(v.intro) ? v.intro : 'hello',
     visibility: parseVisibility(v.visibility) ?? { ...VISIBILITY_DEFAULTS },

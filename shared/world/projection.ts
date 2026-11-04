@@ -242,7 +242,7 @@ function assignNames(floors: readonly FloorCandidate[], previous: ReadonlyMap<st
 function toWorldAgent(c: Candidate, widOf: ReadonlyMap<string, string>, name: string, input: ProjectionInput): WorldAgent {
   const a = c.a;
   const parent = a.kind === 'sub' && a.parentId ? widOf.get(a.parentId) : undefined;
-  const parts: AppearanceParts = flattenAppearance(hash32(c.wid), a.parts, a.look);
+  const parts = flattenAppearance(hash32(c.wid), a.parts, a.look);
   const out: WorldAgent = {
     id: c.wid,
     kind: a.kind,

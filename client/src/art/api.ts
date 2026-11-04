@@ -22,7 +22,7 @@
 // - Paleta clara (neutros frios + madeira quente + acentos saturados nos objetos); contorno 1px cinza-azulado
 //   escuro (não preto); 3–4 tons por material; brilhos especulares; sombras de contato; muitos detalhes pequenos.
 
-import type { AppearanceParts } from '../../../shared/appearance';
+import type { Accessory, AppearanceParts, BottomStyle, HairStyle, TopStyle } from '../../../shared/appearance';
 
 export const TILE = 16;
 
@@ -66,13 +66,9 @@ export type HeldItem = 'none' | 'coffee' | 'water' | 'papers' | 'laptop' | 'book
   | 'lipstick' // batom (pose 'groom')
   | 'comb'; // pente (pose 'groom')
 
-export type HairStyle =
-  | 'short' | 'buzz' | 'spiky' | 'side_part' | 'curly' | 'afro' | 'bob' | 'long' | 'ponytail' | 'bun' | 'pigtails'
-  | 'mohawk' | 'bald' | 'wavy';
+export type { Accessory, BottomStyle, HairStyle, TopStyle } from '../../../shared/appearance';
 
-export type TopStyle = 'tshirt' | 'hoodie' | 'shirt_tie' | 'sweater' | 'jacket' | 'blouse' | 'polo';
 
-export type Accessory = 'none' | 'glasses' | 'sunglasses' | 'headphones' | 'cap' | 'beanie' | 'earrings' | 'bow';
 
 export interface Appearance {
   skin: string;
@@ -92,7 +88,7 @@ export interface Appearance {
   /** (Opcional, aditivo) Barba/bigode — só sorteado para look 'm'. Ausente = sem pelos faciais. */
   facialHair?: 'none' | 'stubble' | 'beard' | 'mustache' | 'goatee';
   /** (Opcional, aditivo) Parte de baixo da roupa. Ausente = calça. */
-  bottomStyle?: 'pants' | 'shorts' | 'skirt';
+  bottomStyle?: BottomStyle;
 }
 
 export interface Rect {

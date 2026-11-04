@@ -1,7 +1,7 @@
 // Renderização procedural dos personagens chibi (puro: desenha num PixelBuf).
 // Folha de 24x34 px com âncora (12, 31) no centro dos pés. Em pé: cabelo a partir de y≈5,
 // cabeça y 7–17, tronco 18–23, calça 24–28, sapatos 29–30. Sentado: tronco/cabeça 4px abaixo.
-import type { Appearance, CharacterFrameRequest, HeldItem, Pose } from '../api';
+import type { Appearance, BottomStyle, CharacterFrameRequest, HeldItem, Pose } from '../api';
 import { luminance, mix, ramp, shade, type Ramp } from '../core/color';
 import { PixelBuf, type Palette } from '../core/pixbuf';
 import type { BufSprite } from '../core/sprite';
@@ -855,6 +855,93 @@ function drawAccessory(dc: Dc): void {
       else b.stamp(rows, ox + 7, oy + 1, pal);
       break;
     }
+    // Fork Ordahi: acessórios só do escritório (shared/appearance.ts, OFFICE_ACCESSORIES).
+    case 'hat': {
+      const pal = { o: it.base, h: it.lt, H: it.hi, d: it.dk, D: it.dd, b: p.acc.base };
+      const rows =
+        v === 'side'
+          ? ['.....oooooo.....', '....ohhhooood...', '....ohHhooood...', '....oohoooood...', '....bbbbbbbbb...', 'ooooooooooooood.', '.dddddddddddddd.']
+          : ['.....oooooo.....', '....ohhhooood...', '....ohHhooood...', '....oohoooood...', '....bbbbbbbbb...', '.oooooooooooood.', 'dddddddddddddddd'];
+      b.stamp(rows, ox - 1, oy, pal);
+      break;
+    }
+    case 'headband': {
+      for (let cx = 1; cx <= 12; cx++) {
+        put(cx, 6, cx < 5 ? it.lt : it.base);
+        put(cx, 7, cx > 9 ? it.dd : it.dk);
+      }
+      if (v === 'up') {
+        put(6, 8, it.base);
+        put(7, 8, it.dk);
+        put(6, 9, it.dk);
+      }
+      break;
+    }
+    case 'scarf': {
+      if (v === 'side') {
+        for (let cx = 2; cx <= 9; cx++) {
+          put(cx, 14, cx < 5 ? it.lt : it.base);
+          put(cx, 15, it.base);
+          put(cx, 16, cx > 6 ? it.dk : it.base);
+        }
+        for (let cy = 17; cy <= 19; cy++) {
+          put(3, cy, it.base);
+          put(4, cy, it.dk);
+        }
+      } else {
+        for (let cx = 2; cx <= 11; cx++) {
+          put(cx, 14, cx < 6 ? it.lt : it.base);
+          put(cx, 15, it.base);
+          put(cx, 16, cx > 8 ? it.dk : it.base);
+        }
+        if (v === 'down') {
+          for (let cy = 17; cy <= 20; cy++) {
+            put(8, cy, it.base);
+            put(9, cy, it.dk);
+          }
+          put(8, 20, it.lt);
+          put(9, 20, it.lt);
+        }
+      }
+      break;
+    }
+    case 'necklace': {
+      if (v === 'down') {
+        put(3, 15, it.dk);
+        put(10, 15, it.dk);
+        put(4, 16, it.base);
+        put(9, 16, it.dk);
+        put(5, 17, it.base);
+        put(8, 17, it.base);
+        put(6, 18, it.lt);
+        put(7, 18, it.base);
+        put(6, 19, it.hi);
+        put(7, 19, it.dk);
+      } else if (v === 'side') {
+        put(5, 15, it.dk);
+        put(4, 16, it.base);
+        put(3, 17, it.lt);
+        put(3, 18, it.base);
+      } else {
+        for (let cx = 4; cx <= 9; cx++) put(cx, 15, it.dk);
+      }
+      break;
+    }
+    case 'hoops': {
+      const hoop = (cx: number) => {
+        put(cx, 12, it.lt);
+        put(cx - 1, 13, it.base);
+        put(cx + 1, 13, it.dk);
+        put(cx - 1, 14, it.base);
+        put(cx + 1, 14, it.dk);
+        put(cx, 15, it.dk);
+      };
+      if (v === 'down') {
+        hoop(0);
+        hoop(13);
+      } else if (v === 'side') hoop(8);
+      break;
+    }
     case 'none':
       break;
   }
@@ -906,20 +993,31 @@ function sleeveLength(a: Appearance): number {
   switch (a.topStyle) {
     case 'tshirt':
     case 'polo':
+    case 'striped':
+    case 'dress':
       return 2;
     case 'blouse':
       return 3;
+    case 'tank':
+      return 0;
     default:
       return 99;
   }
 }
 
+/** Fork Ordahi: o vestido é uma peça só, a saia sai da parte de cima (longa, se a parte de baixo for a saia longa). */
+function bottomOf(a: Appearance): BottomStyle {
+  const style = a.bottomStyle ?? 'pants';
+  return a.topStyle === 'dress' && style !== 'long_skirt' ? 'skirt' : style;
+}
+
 function drawLegs(dc: Dc): void {
   const { b, p, r, a } = dc;
-  const pants = p.bottom;
+  const pants = a.topStyle === 'dress' ? p.top : p.bottom;
   const sh = p.shoes;
-  const style = a.bottomStyle ?? 'pants';
-  const skinLeg = style !== 'pants';
+  const style = bottomOf(a);
+  const long = style === 'long_skirt';
+  const skinLeg = style !== 'pants' && !long;
   if (r.view === 'side') {
     drawLegsSide(dc, pants, sh, skinLeg);
     return;
@@ -928,7 +1026,7 @@ function drawLegs(dc: Dc): void {
     if (r.view === 'down') {
       // Colo (coxas em direção à câmera) e pontas dos sapatos.
       const y0 = 24 + r.ub;
-      const lapTop = style === 'skirt' ? p.bottom : pants;
+      const lapTop = pants;
       b.rect(8, y0, 8, 1, lapTop.lt);
       b.rect(8, y0 + 1, 8, 1, lapTop.base);
       b.set(15, y0, lapTop.base);
@@ -991,6 +1089,17 @@ function drawLegs(dc: Dc): void {
   const b1 = r.view === 'up' ? r.legA.dy : r.legB.dy;
   leg(8, a1, true);
   leg(13, b1, true);
+  if (long) {
+    // Saia até o tornozelo, abrindo da cintura para baixo, com pregas: as pernas somem e só os sapatos aparecem.
+    b.rect(8, top + 2, 8, 1, pants.base);
+    b.rect(7, top + 3, 10, 2, pants.base);
+    b.set(7, top + 3, pants.lt);
+    b.set(7, top + 4, pants.lt);
+    b.set(16, top + 3, pants.dk);
+    b.set(16, top + 4, pants.dk);
+    for (const x of [10, 13]) b.vline(x, top + 2, top + 4, pants.dk);
+    return;
+  }
   if (!skinLeg || style === 'shorts') {
     b.set(10, top + 2, pants.dk);
     b.set(13, top + 2, pants.base);
@@ -999,7 +1108,7 @@ function drawLegs(dc: Dc): void {
 
 function drawLegsSide(dc: Dc, pants: Ramp, sh: Ramp, skinLeg: boolean): void {
   const { b, p, r, a } = dc;
-  const style = a.bottomStyle ?? 'pants';
+  const style = bottomOf(a);
   if (r.seated) {
     const y0 = 24 + r.ub; // linha do quadril
     // Coxa horizontal para a frente (esquerda) e canela para baixo.
@@ -1052,6 +1161,14 @@ function drawLegsSide(dc: Dc, pants: Ramp, sh: Ramp, skinLeg: boolean): void {
   };
   leg(r.legA.dx, -r.legA.dy, true);
   leg(r.legB.dx, -r.legB.dy, false);
+  if (style === 'long_skirt') {
+    b.rect(9, top + 2, 6, 1, pants.base);
+    b.rect(8, top + 3, 8, 2, pants.base);
+    b.set(8, top + 3, pants.lt);
+    b.set(8, top + 4, pants.lt);
+    b.vline(15, top + 3, top + 4, pants.dk);
+    b.vline(11, top + 2, top + 4, pants.dk);
+  }
 }
 
 function drawTorso(dc: Dc): void {
@@ -1104,6 +1221,28 @@ function drawTorso(dc: Dc): void {
         break;
       case 'tshirt':
         b.set(9 + lx, y + 2, ac.base);
+        break;
+      // Fork Ordahi: roupas só do escritório (shared/appearance.ts, OFFICE_TOP_STYLES).
+      case 'blazer':
+        b.set(9 + lx, y, ac.lt);
+        b.set(10 + lx, y, t.hi);
+        b.set(9 + lx, y + 1, ac.base);
+        b.set(10 + lx, y + 1, t.lt);
+        b.vline(9 + lx, y + 2, y + 4, t.dk);
+        b.set(12 + lx, y + 3, t.dk);
+        break;
+      case 'tank':
+        b.rect(8 + lx, y, 7, 1, p.skin.base);
+        b.set(14 + lx, y, p.skin.dk);
+        b.set(11 + lx, y, t.base);
+        break;
+      case 'striped':
+        for (const dy of [1, 3, 5]) b.rect(8 + lx, y + dy, 7, 1, ac.base);
+        break;
+      case 'dress':
+        b.rect(8 + lx, y + 4, 7, 1, ac.base);
+        b.rect(8 + lx, y + 5, 7, 1, t.base);
+        b.set(9 + lx, y, t.hi);
         break;
     }
     drawLanyard(dc);
@@ -1201,6 +1340,61 @@ function drawTorso(dc: Dc): void {
         b.set(11, y + 1, t.dk);
         b.set(11, y + 2, ac.lt);
       } else b.rect(9, y, 6, 1, ac.base);
+      break;
+    // Fork Ordahi: roupas só do escritório.
+    case 'blazer':
+      if (front) {
+        // Lapelas em V sobre a camisa, um botão onde o paletó fecha.
+        b.rect(10, y, 4, 2, ac.base);
+        b.rect(11, y + 2, 2, 1, ac.base);
+        b.set(13, y, ac.dk);
+        b.set(13, y + 1, ac.dk);
+        b.set(9, y, t.hi);
+        b.set(14, y, t.lt);
+        b.set(10, y + 1, t.hi);
+        b.set(13, y + 1, t.lt);
+        b.set(11, y + 2, t.lt);
+        b.set(12, y + 2, ac.base);
+        b.vline(11, y + 3, y + 5, t.dk);
+        b.set(12, y + 4, t.dd);
+        b.set(14, y + 2, ac.lt);
+      } else {
+        b.rect(9, y, 6, 1, t.lt);
+        b.vline(11, y + 1, y + 5, t.dk);
+      }
+      break;
+    case 'tank':
+      // Alças: ombro e colo de fora.
+      b.set(8, y, p.skin.base);
+      b.set(15, y, p.skin.dk);
+      b.rect(10, y, 4, front ? 2 : 1, p.skin.base);
+      b.set(13, y, p.skin.dk);
+      if (front) {
+        b.set(13, y + 1, p.skin.dk);
+        b.rect(11, y + 2, 2, 1, p.skin.base);
+        b.rect(9, y + 1, 1, 1, ac.base);
+        b.rect(14, y + 1, 1, 1, ac.dk);
+      }
+      break;
+    case 'striped':
+      if (front) b.rect(10, y, 4, 1, t.dk);
+      for (const dy of [1, 3, 5]) {
+        b.rect(8, y + dy, 8, 1, ac.base);
+        b.set(15, y + dy, ac.dk);
+      }
+      break;
+    case 'dress':
+      if (front) {
+        b.rect(10, y, 4, 1, p.skin.base);
+        b.set(13, y, p.skin.dk);
+        b.set(9, y, t.hi);
+        b.set(14, y, t.lt);
+      } else b.rect(9, y, 6, 1, t.dk);
+      // Cinto na cintura; a saia sai da mesma peça em drawLegs.
+      b.rect(8, y + 4, 8, 1, ac.base);
+      b.set(15, y + 4, ac.dk);
+      b.rect(8, y + 5, 8, 1, t.base);
+      b.set(15, y + 5, t.dk);
       break;
   }
   drawLanyard(dc);

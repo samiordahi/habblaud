@@ -19,14 +19,30 @@
 //   é exclusivo de um look, exceto barba ('m').
 // - `flattenAppearance`: o que sobe ao World (`WorldAgent.parts`): só as 13 peças de PART_KEYS, sem `lanyard`, `look`
 //   nem a semente. No mundo a semente é `hash32(id aleatório do mundo)`, nunca a do escritório (docs/world/privacidade.md).
-import { ACCESSORIES, BOTTOM_STYLES, FACIAL_HAIR, HAIR_STYLES, PART_KEYS, TOP_STYLES, type AppearanceParts } from '../appearance';
+import {
+  ACCESSORIES,
+  BOTTOM_STYLES,
+  FACIAL_HAIR,
+  HAIR_STYLES,
+  PART_KEYS,
+  TOP_STYLES,
+  parseAppearanceParts,
+  type Accessory,
+  type AppearanceParts,
+  type BottomStyle,
+  type HairStyle,
+  type TopStyle,
+} from '../appearance';
 import { mulberry32 } from '../hash';
+import type { AppearanceParts as WorldParts } from './protocol';
 
-export type HairStyle = (typeof HAIR_STYLES)[number];
-export type TopStyle = (typeof TOP_STYLES)[number];
-export type Accessory = (typeof ACCESSORIES)[number];
+export type { Accessory, BottomStyle, HairStyle, TopStyle } from '../appearance';
 export type FacialHair = (typeof FACIAL_HAIR)[number];
-export type BottomStyle = (typeof BOTTOM_STYLES)[number];
+// O sorteio só conhece as peças do mundo: as do escritório (fork Ordahi) entram pelo editor, e a ordem dos sorteios não muda.
+type SeedHair = (typeof HAIR_STYLES)[number];
+type SeedTop = (typeof TOP_STYLES)[number];
+type SeedAccessory = (typeof ACCESSORIES)[number];
+type SeedBottom = (typeof BOTTOM_STYLES)[number];
 
 /** Aparência completa (o mesmo formato de `Appearance` em client/src/art/api.ts; o cliente confere que não se separam). */
 export interface SeedAppearance {
@@ -90,12 +106,19 @@ export const ACC_COLORS: Record<Accessory, readonly string[]> = {
   beanie: ['#e2604f', '#efb54a', '#4bab72', '#8d66cf', '#3d4352', '#36b0b0'],
   earrings: ['#f2c14e', '#d9dde3'],
   bow: ['#e2604f', '#e47aa8', '#efb54a', '#4a86d8', '#8d66cf'],
+  // Fork Ordahi: peças só do escritório.
+  round_glasses: ['#2b2b33', '#5a3a28', '#c9a24a', '#8a8f99', '#b03a3a'],
+  hat: ['#6b4630', '#2b2b33', '#d8c49a', '#7a2f3a', '#2f4c7d'],
+  headband: ['#e2604f', '#efb54a', '#4bab72', '#4a86d8', '#8d66cf', '#f1efe9'],
+  scarf: ['#e2604f', '#efb54a', '#4bab72', '#4a86d8', '#8d66cf', '#3d4352'],
+  necklace: ['#f2c14e', '#d9dde3', '#e2604f', '#36b0b0'],
+  hoops: ['#f2c14e', '#d9dde3'],
 };
 const LANYARDS = ['#f2b33d', '#e2604f', '#4a86d8', '#4bab72', '#8d66cf', '#36b0b0'] as const;
 
 type Weights<T extends string> = Readonly<Record<T, number>>;
 
-const HAIR_W: Record<'f' | 'm', Weights<HairStyle>> = {
+const HAIR_W: Record<'f' | 'm', Weights<SeedHair>> = {
   m: {
     short: 16, buzz: 9, spiky: 9, side_part: 12, curly: 9, afro: 6, bob: 2, long: 4, ponytail: 3, bun: 4,
     pigtails: 0.4, mohawk: 4, bald: 5, wavy: 9,
@@ -106,18 +129,18 @@ const HAIR_W: Record<'f' | 'm', Weights<HairStyle>> = {
   },
 };
 
-const TOP_W: Record<'f' | 'm', Weights<TopStyle>> = {
+const TOP_W: Record<'f' | 'm', Weights<SeedTop>> = {
   m: { tshirt: 20, hoodie: 16, shirt_tie: 10, sweater: 13, jacket: 13, blouse: 2, polo: 14 },
   f: { tshirt: 17, hoodie: 14, shirt_tie: 5, sweater: 14, jacket: 12, blouse: 20, polo: 8 },
 };
 
-const ACC_W: Record<'f' | 'm', Weights<Accessory>> = {
+const ACC_W: Record<'f' | 'm', Weights<SeedAccessory>> = {
   m: { none: 40, glasses: 18, sunglasses: 4, headphones: 13, cap: 7, beanie: 6, earrings: 2, bow: 0.3 },
   f: { none: 36, glasses: 16, sunglasses: 4, headphones: 11, cap: 4, beanie: 5, earrings: 13, bow: 7 },
 };
 
 const FACIAL_W: Weights<FacialHair> = { none: 62, stubble: 12, beard: 13, mustache: 7, goatee: 6 };
-const BOTTOM_W: Record<'f' | 'm', Weights<BottomStyle>> = {
+const BOTTOM_W: Record<'f' | 'm', Weights<SeedBottom>> = {
   m: { pants: 88, shorts: 12, skirt: 0 },
   f: { pants: 62, shorts: 10, skirt: 28 },
 };
@@ -219,17 +242,114 @@ export function appearanceFromSeed(seed: number, opts: { look?: 'f' | 'm'; sub?:
   return { ...a, ...chosen };
 }
 
+const uniq = (list: readonly string[]): readonly string[] => [...new Set(list)];
+const colorsOf = (pairs: readonly (readonly [string, number])[]): string[] => pairs.map(([c]) => c);
+const ACCENTS = uniq([...LIGHT_ACCENTS, ...TOP_COLORS]);
+
+/** Cores da parte de cima e do detalhe para cada estilo: as mesmas que o sorteio usa. */
+function topPalettes(style: TopStyle): { top: readonly string[]; topAccent: readonly string[] } {
+  switch (style) {
+    case 'shirt_tie':
+      return { top: SHIRT_COLORS, topAccent: TIE_COLORS };
+    case 'jacket':
+    case 'blazer':
+      return { top: JACKET_COLORS, topAccent: ACCENTS };
+    default:
+      return { top: TOP_COLORS, topAccent: ACCENTS };
+  }
+}
+
+/** Paletas do editor (as que o Habblaud World aceita), conforme o estilo da roupa e o acessório. */
+export function colorPalettes(a: Pick<SeedAppearance, 'topStyle' | 'accessory'>) {
+  const top = topPalettes(a.topStyle);
+  return {
+    skin: SKINS as readonly string[],
+    hair: [...colorsOf(HAIR_NATURAL), ...HAIR_FUN] as readonly string[],
+    eyes: uniq(EYES),
+    top: top.top,
+    topAccent: top.topAccent,
+    bottom: colorsOf(BOTTOMS) as readonly string[],
+    shoes: colorsOf(SHOES) as readonly string[],
+    accessoryColor: ACC_COLORS[a.accessory],
+  };
+}
+
+// Fork Ordahi: o que só existe no escritório não sobe. Cada peça própria vira a do mundo mais parecida com ela.
+const WORLD_HAIR: Readonly<Record<string, SeedHair>> = { braids: 'pigtails', dreads: 'long', fringe: 'bob', undercut: 'side_part', space_buns: 'bun' };
+const WORLD_TOP: Readonly<Record<string, SeedTop>> = { blazer: 'jacket', tank: 'tshirt', striped: 'sweater', dress: 'blouse' };
+const WORLD_ACCESSORY: Readonly<Record<string, SeedAccessory>> = { round_glasses: 'glasses', hat: 'cap', headband: 'none', scarf: 'none', necklace: 'none', hoops: 'earrings' };
+const WORLD_BOTTOM: Readonly<Record<string, SeedBottom>> = { long_skirt: 'skirt' };
+
+const rgbOf = (hex: string): readonly number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+/** A cor da lista mais próxima de `hex` (a própria, se ela já estiver na lista). */
+export function nearestColor(hex: string, list: readonly string[]): string {
+  if (list.includes(hex)) return hex;
+  const [r, g, b] = rgbOf(hex);
+  let best = list[0];
+  let bestD = Infinity;
+  for (const c of list) {
+    const [cr, cg, cb] = rgbOf(c);
+    const d = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
+/**
+ * Fork Ordahi: a aparência que o mundo aceita. O servidor dele recusa o pacote inteiro com peça ou cor fora das listas,
+ * então cor livre vira a da paleta mais próxima e peça do escritório vira a equivalente. Só reduz o que sobe: a
+ * aparência do mundo fica mais pobre que a do escritório, nunca diferente do agente real. Sem peça própria nem cor
+ * livre, devolve a mesma aparência.
+ */
+export function toWorldAppearance(a: SeedAppearance): SeedAppearance {
+  const out: SeedAppearance = {
+    ...a,
+    hairStyle: WORLD_HAIR[a.hairStyle] ?? a.hairStyle,
+    topStyle: WORLD_TOP[a.topStyle] ?? a.topStyle,
+    accessory: WORLD_ACCESSORY[a.accessory] ?? a.accessory,
+    bottomStyle: a.bottomStyle && (WORLD_BOTTOM[a.bottomStyle] ?? a.bottomStyle),
+  };
+  const p = colorPalettes(out);
+  return {
+    ...out,
+    skin: nearestColor(out.skin, p.skin),
+    hair: nearestColor(out.hair, p.hair),
+    eyes: nearestColor(out.eyes, p.eyes),
+    top: nearestColor(out.top, p.top),
+    topAccent: nearestColor(out.topAccent, p.topAccent),
+    bottom: nearestColor(out.bottom, p.bottom),
+    shoes: nearestColor(out.shoes, p.shoes),
+    accessoryColor: nearestColor(out.accessoryColor, p.accessoryColor),
+  };
+}
+
+/** Fork Ordahi: peças de um personagem do mundo. As do escritório ficam de fora: lá, o personagem é só das listas dele. */
+export function parseWorldParts(raw: unknown): WorldParts | null {
+  const parts = parseAppearanceParts(raw);
+  if (!parts) return null;
+  const inWorld =
+    (!parts.hairStyle || (HAIR_STYLES as readonly string[]).includes(parts.hairStyle)) &&
+    (!parts.topStyle || (TOP_STYLES as readonly string[]).includes(parts.topStyle)) &&
+    (!parts.accessory || (ACCESSORIES as readonly string[]).includes(parts.accessory)) &&
+    (!parts.bottomStyle || (BOTTOM_STYLES as readonly string[]).includes(parts.bottomStyle));
+  return inWorld ? (parts as WorldParts) : null;
+}
+
 /**
  * Aparência achatada para o World: as 13 peças de PART_KEYS, nessa ordem, sorteadas pela semente (com o `look` do
- * personagem, para os estilos e a barba baterem com a dica visual) e com as peças escolhidas no editor por cima. Sem
- * `lanyard`, `look` nem a semente.
+ * personagem, para os estilos e a barba baterem com a dica visual) e com as peças escolhidas no editor por cima,
+ * dentro do que o mundo aceita (toWorldAppearance). Sem `lanyard`, `look` nem a semente.
  */
-export function flattenAppearance(seed: number, parts?: AppearanceParts, look?: 'f' | 'm'): AppearanceParts {
-  const a = appearanceFromSeed(seed, { look, parts });
+export function flattenAppearance(seed: number, parts?: AppearanceParts, look?: 'f' | 'm'): WorldParts {
+  const a = toWorldAppearance(appearanceFromSeed(seed, { look, parts }));
   const out: Record<string, string> = {};
   for (const k of PART_KEYS) {
     const v = a[k];
     if (v !== undefined) out[k] = v;
   }
-  return out as AppearanceParts;
+  return out as WorldParts;
 }

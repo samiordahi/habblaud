@@ -10,19 +10,31 @@ export const ACCESSORIES = ['none', 'glasses', 'sunglasses', 'headphones', 'cap'
 export const FACIAL_HAIR = ['none', 'stubble', 'beard', 'mustache', 'goatee'] as const;
 export const BOTTOM_STYLES = ['pants', 'shorts', 'skirt'] as const;
 
+// Fork Ordahi: peças que só existem no escritório. As listas acima são as do Habblaud World (protocol.ts confere que
+// não se separam) e o mundo recusa o pacote com peça fora delas; flattenAppearance troca estas pela mais próxima.
+export const OFFICE_HAIR_STYLES = ['braids', 'dreads', 'fringe', 'undercut', 'space_buns'] as const;
+export const OFFICE_TOP_STYLES = ['blazer', 'tank', 'striped', 'dress'] as const;
+export const OFFICE_ACCESSORIES = ['round_glasses', 'hat', 'headband', 'scarf', 'necklace', 'hoops'] as const;
+export const OFFICE_BOTTOM_STYLES = ['long_skirt'] as const;
+
+export type HairStyle = (typeof HAIR_STYLES)[number] | (typeof OFFICE_HAIR_STYLES)[number];
+export type TopStyle = (typeof TOP_STYLES)[number] | (typeof OFFICE_TOP_STYLES)[number];
+export type Accessory = (typeof ACCESSORIES)[number] | (typeof OFFICE_ACCESSORIES)[number];
+export type BottomStyle = (typeof BOTTOM_STYLES)[number] | (typeof OFFICE_BOTTOM_STYLES)[number];
+
 /** Peças escolhidas no editor, aplicadas por cima da aparência sorteada pela `seed`. Cores em `#rrggbb`. */
 export interface AppearanceParts {
   skin?: string;
   hair?: string;
-  hairStyle?: (typeof HAIR_STYLES)[number];
+  hairStyle?: HairStyle;
   eyes?: string;
   top?: string;
   topAccent?: string;
-  topStyle?: (typeof TOP_STYLES)[number];
+  topStyle?: TopStyle;
   bottom?: string;
-  bottomStyle?: (typeof BOTTOM_STYLES)[number];
+  bottomStyle?: BottomStyle;
   shoes?: string;
-  accessory?: (typeof ACCESSORIES)[number];
+  accessory?: Accessory;
   accessoryColor?: string;
   facialHair?: (typeof FACIAL_HAIR)[number];
 }
@@ -38,10 +50,10 @@ export const PART_KEYS = [
 export type PartKey = (typeof PART_KEYS)[number];
 
 const STYLE_VALUES: Partial<Record<PartKey, readonly string[]>> = {
-  hairStyle: HAIR_STYLES,
-  topStyle: TOP_STYLES,
-  bottomStyle: BOTTOM_STYLES,
-  accessory: ACCESSORIES,
+  hairStyle: [...HAIR_STYLES, ...OFFICE_HAIR_STYLES],
+  topStyle: [...TOP_STYLES, ...OFFICE_TOP_STYLES],
+  bottomStyle: [...BOTTOM_STYLES, ...OFFICE_BOTTOM_STYLES],
+  accessory: [...ACCESSORIES, ...OFFICE_ACCESSORIES],
   facialHair: FACIAL_HAIR,
 };
 const COLOR = /^#[0-9a-f]{6}$/i;
@@ -66,6 +78,11 @@ export function parseAppearanceParts(raw: unknown): AppearanceParts | null {
     out[k] = allowed ? v : v.toLowerCase();
   }
   return out as AppearanceParts;
+}
+
+/** Tem caractere de controle ou que disfarça o texto (ver CONTROL). */
+export function hasControlChars(text: string): boolean {
+  return CONTROL.test(text);
 }
 
 /** Nome do personagem: NFC, sem espaços sobrando, de 1 a NAME_MAX caracteres e sem caracteres de controle. */
